@@ -2,9 +2,11 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { Search } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
-import { Button, Card, Label, PageHeader } from "@/components/ui";
-import { api, downloadReportPdf } from "@/lib/api";
+import { ReportCard, ReportsSkeleton } from "@/components/ReportCard";
+import { Button, Card, Input, Label, PageHeader } from "@/components/ui";
+import { api } from "@/lib/api";
 
 type SortOrder = "newest" | "oldest";
 
@@ -14,43 +16,46 @@ function reportTime(r: { created_at?: string | null }) {
   return Number.isFinite(t) ? t : 0;
 }
 
-function formatReportDate(raw?: string | null) {
-  if (!raw) return "Date unknown";
-  const d = new Date(raw);
-  if (!Number.isFinite(d.getTime())) return "Date unknown";
-  return d.toLocaleString(undefined, {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
-}
-
 export default function ReportsPage() {
   const [clients, setClients] = useState<any[]>([]);
   const [reports, setReports] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [clientFilter, setClientFilter] = useState("all");
   const [sortOrder, setSortOrder] = useState<SortOrder>("newest");
+  const [query, setQuery] = useState("");
+
+  async function load() {
+    setLoading(true);
+    setError("");
+    try {
+      const list = await api<any[]>("/api/clients");
+      setClients(list);
+      if (!list.length) {
+        setReports([]);
+        return;
+      }
+      const all = await Promise.all(
+        list.map((c) =>
+          api<any[]>(`/api/clients/${c.id}/reports`).catch(() => [] as any[]),
+        ),
+      );
+      setReports(
+        all.flat().map((r, idx) => ({
+          ...r,
+          client_name: list.find((c) => c.id === r.client_id)?.name || "Client",
+          _k: `${r.id}-${idx}`,
+        })),
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load reports");
+    } finally {
+      setLoading(false);
+    }
+  }
 
   useEffect(() => {
-    (async () => {
-      try {
-        const list = await api<any[]>("/api/clients");
-        setClients(list);
-        const all = await Promise.all(list.map((c) => api<any[]>(`/api/clients/${c.id}/reports`)));
-        setReports(
-          all.flat().map((r, idx) => ({
-            ...r,
-            client_name: list.find((c) => c.id === r.client_id)?.name || "Client",
-            _k: `${r.id}-${idx}`,
-          })),
-        );
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed");
-      }
-    })();
+    void load();
   }, []);
 
   const filtered = useMemo(() => {
@@ -58,12 +63,21 @@ export default function ReportsPage() {
     if (clientFilter !== "all") {
       rows = rows.filter((r) => r.client_id === clientFilter);
     }
+    const q = query.trim().toLowerCase();
+    if (q) {
+      rows = rows.filter(
+        (r) =>
+          (r.title || "").toLowerCase().includes(q) ||
+          (r.summary || "").toLowerCase().includes(q) ||
+          (r.client_name || "").toLowerCase().includes(q),
+      );
+    }
     rows = [...rows].sort((a, b) => {
       const diff = reportTime(a) - reportTime(b);
       return sortOrder === "newest" ? -diff : diff;
     });
     return rows;
-  }, [reports, clientFilter, sortOrder]);
+  }, [reports, clientFilter, sortOrder, query]);
 
   const selectedClientName =
     clientFilter === "all" ? null : clients.find((c) => c.id === clientFilter)?.name || null;
@@ -72,12 +86,52 @@ export default function ReportsPage() {
     <AppShell>
       <PageHeader
         title="All reports"
-        subtitle="Every client’s reports in one place — open a client for the full write-up, or download a PDF."
+        subtitle="Every client’s reports in one place — read the full write-up here, open the client workspace, or download a PDF."
+        actions={
+          clients.length ? (
+            <Link href={`/clients/${clients[0].id}?tab=reports`}>
+              <Button variant="ghost">Go to a client</Button>
+            </Link>
+          ) : (
+            <Link href="/clients">
+              <Button>Add a client</Button>
+            </Link>
+          )
+        }
       />
-      {error ? <p className="text-red-600 mb-4">{error}</p> : null}
+      {error ? (
+        <div className="mb-4 flex flex-wrap items-center gap-3 rounded-xl border border-red-200 bg-red-50/70 px-4 py-3 text-sm text-red-700">
+          <span className="flex-1">{error}</span>
+          <Button
+            type="button"
+            variant="ghost"
+            className="!border-red-200 !bg-white !py-1.5 text-xs"
+            onClick={() => void load()}
+            disabled={loading}
+          >
+            {loading ? "Retrying…" : "Retry"}
+          </Button>
+        </div>
+      ) : null}
 
       <Card className="mb-4">
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="sm:col-span-2 lg:col-span-1">
+            <Label>Search</Label>
+            <div className="relative mt-1">
+              <Search
+                size={16}
+                className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--muted)]"
+              />
+              <Input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Title, summary, or company…"
+                className="pl-9"
+                aria-label="Search reports"
+              />
+            </div>
+          </div>
           <div>
             <Label>Company</Label>
             <select
@@ -114,45 +168,52 @@ export default function ReportsPage() {
         </p>
       </Card>
 
-      <div className="space-y-3">
-        {filtered.map((r) => (
-          <Card key={r._k} className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div className="min-w-0">
-              <div className="text-xs uppercase tracking-wide text-[var(--muted)]">{r.client_name}</div>
-              <h2 className="font-semibold mt-1">{r.title}</h2>
-              <p className="text-xs text-[var(--muted)] mt-1">{formatReportDate(r.created_at)}</p>
-              <p className="text-sm text-[var(--muted)] mt-1 line-clamp-2">{r.summary}</p>
-            </div>
-            <div className="flex flex-wrap gap-2 w-full sm:w-auto shrink-0">
-              <Link href={`/clients/${r.client_id}?tab=reports`} className="flex-1 sm:flex-none">
-                <Button variant="ghost" className="w-full sm:w-auto">
-                  Open client
-                </Button>
-              </Link>
+      {loading ? (
+        <ReportsSkeleton rows={4} />
+      ) : (
+        <div className="space-y-3">
+          {filtered.map((r) => (
+            <ReportCard
+              key={r._k}
+              report={r}
+              showClientLink
+              onError={(msg) => setError(msg)}
+            />
+          ))}
+          {reports.length === 0 ? (
+            <Card className="py-8 text-center">
+              <h2 className="font-semibold text-[var(--ink)]">No reports yet</h2>
+              <p className="mx-auto mt-2 max-w-md text-sm text-[var(--muted)]">
+                {clients.length === 0
+                  ? "Add a client first, then run Check competitors to generate a report."
+                  : "Open a client and run Check competitors to generate a written summary you can share."}
+              </p>
+              <div className="mt-4 flex flex-wrap justify-center gap-2">
+                <Link href="/clients">
+                  <Button>{clients.length === 0 ? "Add a client" : "Go to clients"}</Button>
+                </Link>
+              </div>
+            </Card>
+          ) : null}
+          {reports.length > 0 && filtered.length === 0 ? (
+            <Card>
+              <p className="text-sm text-[var(--muted)]">
+                No reports match these filters. Try clearing search or choose “All companies”.
+              </p>
               <Button
-                className="flex-1 sm:flex-none"
-                onClick={() => downloadReportPdf(r.id, `${r.title}.pdf`).catch((e) => setError(e.message))}
+                variant="ghost"
+                className="mt-3"
+                onClick={() => {
+                  setQuery("");
+                  setClientFilter("all");
+                }}
               >
-                Download PDF
+                Clear filters
               </Button>
-            </div>
-          </Card>
-        ))}
-        {reports.length === 0 ? (
-          <Card>
-            <p className="text-sm text-[var(--muted)]">
-              No reports yet. Open a client and generate one. {clients.length === 0 ? "Add a client first." : ""}
-            </p>
-          </Card>
-        ) : null}
-        {reports.length > 0 && filtered.length === 0 ? (
-          <Card>
-            <p className="text-sm text-[var(--muted)]">
-              No reports match this company filter. Try “All companies” or pick another client.
-            </p>
-          </Card>
-        ) : null}
-      </div>
+            </Card>
+          ) : null}
+        </div>
+      )}
     </AppShell>
   );
 }

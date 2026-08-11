@@ -10,8 +10,9 @@ function LoginForm() {
   const { login, loginWithGoogle } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  // Local/dev convenience — one hardcoded test credential (exists in Supabase).
+  const [email, setEmail] = useState("demo@marketbiqs.com");
+  const [password, setPassword] = useState("Demo123456!");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);

@@ -240,6 +240,80 @@ type StreamHandlers = {
   signal?: AbortSignal;
 };
 
+/** Stream client GPT reply via SSE (`/api/clients/{id}/chat/stream`). */
+export async function streamChat(
+  clientId: string,
+  message: string,
+  handlers: StreamHandlers = {},
+): Promise<void> {
+  const headers = new Headers({ "Content-Type": "application/json" });
+  const token = getToken();
+  if (token) headers.set("Authorization", `Bearer ${token}`);
+  const agencyId = getAgencyId();
+  if (agencyId) headers.set("X-Agency-Id", agencyId);
+
+  const res = await fetch(`${apiBase()}/api/clients/${clientId}/chat/stream`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ message }),
+    signal: handlers.signal,
+  });
+
+  if (!res.ok) {
+    let detail = "Chat failed";
+    try {
+      const data = (await res.json()) as ApiError;
+      if (typeof data.detail === "string") detail = data.detail;
+      else if (Array.isArray(data.detail)) detail = data.detail.map((d) => d.msg).join(", ");
+    } catch {
+      detail = res.statusText || detail;
+    }
+    throw new Error(detail);
+  }
+
+  if (!res.body) throw new Error("No stream from server");
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const parts = buffer.split("\n\n");
+    buffer = parts.pop() || "";
+
+    for (const part of parts) {
+      const line = part
+        .split("\n")
+        .map((l) => l.trim())
+        .find((l) => l.startsWith("data:"));
+      if (!line) continue;
+      const raw = line.replace(/^data:\s?/, "");
+      if (!raw || raw === "[DONE]") continue;
+      let event: {
+        type?: string;
+        content?: string;
+        detail?: string;
+        message?: ChatMessage;
+      };
+      try {
+        event = JSON.parse(raw);
+      } catch {
+        continue;
+      }
+      if (event.type === "user" && event.message) handlers.onUser?.(event.message);
+      else if (event.type === "delta" && event.content) handlers.onDelta?.(event.content);
+      else if (event.type === "done" && event.message) handlers.onDone?.(event.message);
+      else if (event.type === "error") {
+        handlers.onError?.(event.detail || "Stream error");
+        throw new Error(event.detail || "Stream error");
+      }
+    }
+  }
+}
+
 /** Stream help desk reply via SSE (`/api/helpdesk/chat/stream`) — uses platform GROQ_API_KEY. */
 export async function streamHelpdeskChat(
   message: string,

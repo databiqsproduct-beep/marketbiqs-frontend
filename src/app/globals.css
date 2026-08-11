@@ -91,6 +91,17 @@ canvas {
   }
 }
 
+/* Keep main content clear of fixed help FAB / mobile chrome */
+.page-bottom-pad {
+  padding-bottom: max(5rem, calc(4rem + env(safe-area-inset-bottom)));
+}
+
+@media (min-width: 1024px) {
+  .page-bottom-pad {
+    padding-bottom: 1.5rem;
+  }
+}
+
 table {
   border-collapse: collapse;
 }
