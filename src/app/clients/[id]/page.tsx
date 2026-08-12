@@ -22,6 +22,10 @@ function externalHref(url?: string | null): string | undefined {
   return `https://${raw}`;
 }
 
+function buildListItemKey(name: string) {
+  return name.trim().toLowerCase().slice(0, 120);
+}
+
 function RadarCollapsible({
   title,
   subtitle,
@@ -83,8 +87,8 @@ const VALID_TABS: Tab[] = [
 ];
 
 const TAB_HELP: Record<Tab, string> = {
-  loop: "Start here each week: see what competitors offer that this brand doesn’t, pick what matters, and plan the next moves in plain English.",
-  features: "Everything this brand already offers today. To track something new to build, save it from This week’s plan, Competitors, or Warnings.",
+  loop: "Weekly check-in: see status at a glance, jump to Competitors or Warnings, then write a short client summary.",
+  features: "Everything this brand already offers today. To track something new to build, save it from Competitors or Warnings.",
   competitors:
     "Add or pick a rival, then see the scoreboard and a feature-by-feature comparison for that company.",
   alerts: "Things competitors offer that this brand still doesn’t. Clear these as you act on them.",
@@ -95,9 +99,9 @@ const TAB_HELP: Record<Tab, string> = {
 };
 
 const DEFAULT_NEXT_ACTIONS = [
-  "Read the suggestions below — what rivals offer that this brand still lacks",
-  "Save the important ones to the build list so the team can act on them",
-  "Open a simple build plan (and send tasks to Jira if you use it)",
+  "Open Competitors — pick a rival and review the feature-by-feature comparison",
+  "Open Warnings — save important gaps to the build list, or mark done when handled",
+  "Open Build list — turn saved items into a simple step-by-step plan",
   "Write a short weekly summary you can share with the client",
 ];
 
@@ -200,6 +204,7 @@ function ClientDetailPageInner() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState("");
+  const [wishlistJustSaved, setWishlistJustSaved] = useState<Record<string, true>>({});
   const [setupOpen, setSetupOpen] = useState(false);
   const [intelOpen, setIntelOpen] = useState(false);
   const [intelPhase, setIntelPhase] = useState<IntelRunPhase>("running");
@@ -299,6 +304,28 @@ function ClientDetailPageInner() {
     () => features.filter((f) => !f.is_wishlisted && !f.is_loved),
     [features],
   );
+
+  const wishlistKeys = useMemo(() => {
+    const keys = new Set<string>();
+    for (const f of wishlist) {
+      const key = buildListItemKey(String(f.name || ""));
+      if (key) keys.add(key);
+    }
+    return keys;
+  }, [wishlist]);
+
+  function buildListButton(featureName: string) {
+    const key = buildListItemKey(featureName);
+    const saving = busy === `wish-${key}`;
+    const saved = (!!key && wishlistKeys.has(key)) || !!wishlistJustSaved[key];
+    if (saving) {
+      return { key, label: "Saving to build list…", disabled: true as const };
+    }
+    if (saved) {
+      return { key, label: "Saved to build list", disabled: true as const };
+    }
+    return { key, label: "Save to build list", disabled: !!busy };
+  }
 
   const activeAlerts = useMemo(
     () => alerts.filter((a) => !a.acted_on && !a.acted_at && !a.is_acted && a.status !== "acted"),
@@ -499,12 +526,23 @@ function ClientDetailPageInner() {
   }
 
   async function addWishlist(payload: { feature_name: string; category?: string; description?: string }) {
-    setBusy("wish");
+    const key = buildListItemKey(payload.feature_name);
+    if (!key) {
+      setError("Enter a feature name before saving to the build list.");
+      return;
+    }
+    if (wishlistKeys.has(key) || wishlistJustSaved[key]) {
+      setMessage(`“${payload.feature_name.trim()}” is already on the build list`);
+      return;
+    }
+    setBusy(`wish-${key}`);
+    setError("");
     try {
       const f = await api<any>(`/api/clients/${clientId}/wishlist`, {
         method: "POST",
         body: JSON.stringify(payload),
       });
+      setWishlistJustSaved((prev) => ({ ...prev, [key]: true }));
       setMessage(`Saved “${f.name}” to the build list`);
       setSelectedFeatureId(f.id);
       await loadAll();
@@ -668,13 +706,7 @@ function ClientDetailPageInner() {
     { id: "radar", label: "What’s trending" },
   ];
 
-  const loopRecs = weekly?.recommendations || [];
-  const missingCount = loopRecs.filter((r: any) => r.type === "missing").length;
-  const improveCount = loopRecs.filter((r: any) => r.type !== "missing").length;
-  const nextActions =
-    Array.isArray(weekly?.next_actions) && weekly.next_actions.length
-      ? weekly.next_actions
-      : DEFAULT_NEXT_ACTIONS;
+  const nextActions = DEFAULT_NEXT_ACTIONS;
 
   return (
     <AppShell>
@@ -782,61 +814,81 @@ function ClientDetailPageInner() {
             <Card>
               <h2 className="font-semibold text-lg">What this page is for</h2>
               <p className="mt-2 text-sm leading-relaxed text-[var(--muted)]">
-                Think of this as a weekly check-in for {client.name}. We look at what competitors offer, highlight
-                what this brand is missing or can improve, and help you decide what to build or talk about next —
-                without needing deep tech jargon.
+                Think of this as a weekly check-in for {client.name}. Use Competitors for detail, Warnings for gaps to
+                act on, and Build list for what the team will ship next — without repeating the same ideas in three places.
               </p>
               <div className="mt-4 grid gap-3 sm:grid-cols-3">
-                <div className="rounded-xl border border-[var(--line)] bg-[var(--bg)]/60 px-3 py-3">
+                <button
+                  type="button"
+                  onClick={() => setTab("competitors")}
+                  className="rounded-xl border border-[var(--line)] bg-[var(--bg)]/60 px-3 py-3 text-left transition hover:border-[var(--accent)] hover:bg-[var(--accent-soft)]/40"
+                >
                   <div className="text-xs uppercase tracking-wide text-[var(--muted)]">Step 1</div>
-                  <div className="mt-1 text-sm font-medium text-[var(--ink)]">Read the suggestions</div>
+                  <div className="mt-1 text-sm font-medium text-[var(--ink)]">Review competitors</div>
                   <p className="mt-1 text-xs leading-relaxed text-[var(--muted)]">
-                    Each card is one idea: something a rival has, or something this brand already has but could make better.
+                    Compare feature-by-feature with each rival and see where {client.name} is ahead or behind.
                   </p>
-                </div>
-                <div className="rounded-xl border border-[var(--line)] bg-[var(--bg)]/60 px-3 py-3">
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTab("alerts")}
+                  className="rounded-xl border border-[var(--line)] bg-[var(--bg)]/60 px-3 py-3 text-left transition hover:border-[var(--accent)] hover:bg-[var(--accent-soft)]/40"
+                >
                   <div className="text-xs uppercase tracking-wide text-[var(--muted)]">Step 2</div>
-                  <div className="mt-1 text-sm font-medium text-[var(--ink)]">Save what matters</div>
+                  <div className="mt-1 text-sm font-medium text-[var(--ink)]">Clear warnings</div>
                   <p className="mt-1 text-xs leading-relaxed text-[var(--muted)]">
-                    Hit “Save to build list” on the ideas worth acting on. They’ll wait for you under Build list.
+                    Save important gaps to the build list, or mark done once you’ve handled them.
                   </p>
-                </div>
-                <div className="rounded-xl border border-[var(--line)] bg-[var(--bg)]/60 px-3 py-3">
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTab("wishlist")}
+                  className="rounded-xl border border-[var(--line)] bg-[var(--bg)]/60 px-3 py-3 text-left transition hover:border-[var(--accent)] hover:bg-[var(--accent-soft)]/40"
+                >
                   <div className="text-xs uppercase tracking-wide text-[var(--muted)]">Step 3</div>
-                  <div className="mt-1 text-sm font-medium text-[var(--ink)]">Share a short update</div>
+                  <div className="mt-1 text-sm font-medium text-[var(--ink)]">Ship from build list</div>
                   <p className="mt-1 text-xs leading-relaxed text-[var(--muted)]">
-                    Write a weekly summary for the client, or open Build list to turn an idea into simple next steps.
+                    Turn saved items into simple next steps — and write a short weekly summary for the client.
                   </p>
-                </div>
+                </button>
               </div>
             </Card>
 
             <Card>
               <h2 className="font-semibold mb-3">At a glance</h2>
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                <div className="rounded-xl border border-[var(--line)] px-3 py-3">
+                <button
+                  type="button"
+                  onClick={() => setTab("competitors")}
+                  className="rounded-xl border border-[var(--line)] px-3 py-3 text-left transition hover:border-[var(--accent)]"
+                >
                   <div className="text-2xl font-semibold text-[var(--ink)]">{competitors.length}</div>
                   <div className="mt-0.5 text-xs text-[var(--muted)]">Competitors watched</div>
-                </div>
-                <div className="rounded-xl border border-[var(--line)] px-3 py-3">
-                  <div className="text-2xl font-semibold text-[var(--ink)]">{loopRecs.length}</div>
-                  <div className="mt-0.5 text-xs text-[var(--muted)]">
-                    Ideas this week
-                    {loopRecs.length ? (
-                      <span className="block mt-0.5">
-                        {missingCount} missing · {improveCount} to improve
-                      </span>
-                    ) : null}
-                  </div>
-                </div>
-                <div className="rounded-xl border border-[var(--line)] px-3 py-3">
-                  <div className="text-2xl font-semibold text-[var(--ink)]">{wishlist.length}</div>
-                  <div className="mt-0.5 text-xs text-[var(--muted)]">Saved on build list</div>
-                </div>
-                <div className="rounded-xl border border-[var(--line)] px-3 py-3">
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTab("alerts")}
+                  className="rounded-xl border border-[var(--line)] px-3 py-3 text-left transition hover:border-[var(--accent)]"
+                >
                   <div className="text-2xl font-semibold text-[var(--ink)]">{activeAlerts.length}</div>
                   <div className="mt-0.5 text-xs text-[var(--muted)]">Open warnings</div>
-                </div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTab("wishlist")}
+                  className="rounded-xl border border-[var(--line)] px-3 py-3 text-left transition hover:border-[var(--accent)]"
+                >
+                  <div className="text-2xl font-semibold text-[var(--ink)]">{wishlist.length}</div>
+                  <div className="mt-0.5 text-xs text-[var(--muted)]">Saved on build list</div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTab("reports")}
+                  className="rounded-xl border border-[var(--line)] px-3 py-3 text-left transition hover:border-[var(--accent)]"
+                >
+                  <div className="text-2xl font-semibold text-[var(--ink)]">{reports.length}</div>
+                  <div className="mt-0.5 text-xs text-[var(--muted)]">Reports</div>
+                </button>
               </div>
               {weekly?.latest_report ? (
                 <p className="mt-3 text-sm text-[var(--muted)]">
@@ -879,102 +931,28 @@ function ClientDetailPageInner() {
                   </li>
                 ))}
               </ol>
+              <div className="mt-4 flex flex-wrap gap-2">
+                <Button variant="ghost" onClick={() => setTab("competitors")}>
+                  Open Competitors
+                </Button>
+                <Button variant="ghost" onClick={() => setTab("alerts")}>
+                  Open Warnings{activeAlerts.length ? ` (${activeAlerts.length})` : ""}
+                </Button>
+                <Button variant="ghost" onClick={() => setTab("wishlist")}>
+                  Open Build list{wishlist.length ? ` (${wishlist.length})` : ""}
+                </Button>
+              </div>
               <p className="mt-4 text-xs leading-relaxed text-[var(--muted)]">
                 “Write weekly summary” creates a short client-ready note from the latest findings and saves it under Reports.
               </p>
             </Card>
 
-            <div className="pt-1">
-              <h2 className="font-semibold">Ideas to review</h2>
-              <p className="mt-1 text-sm text-[var(--muted)] max-w-2xl leading-relaxed">
-                Each card is one opportunity. Pink labels mean a competitor has it and this brand doesn’t. Amber labels
-                mean this brand already has something similar but a rival does it better.
-              </p>
-            </div>
-
-            {loopRecs.map((rec: any) => {
-              const isMissing = rec.type === "missing";
-              return (
-                <Card key={`${rec.type}-${rec.feature_name}-${rec.competitor_id}`}>
-                  <div
-                    className={`text-xs font-medium uppercase tracking-wide ${
-                      isMissing ? "text-rose-600" : "text-amber-700"
-                    }`}
-                  >
-                    {isMissing ? "They have it · you don’t yet" : "You have it · make it stronger"}
-                  </div>
-                  <div className="font-semibold mt-1.5 text-lg">{rec.feature_name}</div>
-                  <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-[var(--muted)]">
-                    <span>
-                      Compared with <strong className="font-medium text-[var(--ink)]">{rec.competitor_name}</strong>
-                    </span>
-                    <span aria-hidden>·</span>
-                    <span>{confidenceLabel(rec.confidence_score)}</span>
-                    {rec.category ? (
-                      <>
-                        <span aria-hidden>·</span>
-                        <span>{rec.category}</span>
-                      </>
-                    ) : null}
-                  </div>
-
-                  {rec.recommendation ? (
-                    <div className="mt-4">
-                      <div className="text-xs font-medium uppercase tracking-wide text-[var(--muted)]">What this means</div>
-                      <p className="mt-1.5 text-sm leading-relaxed text-[var(--ink)]">{rec.recommendation}</p>
-                    </div>
-                  ) : null}
-
-                  {rec.why ? (
-                    <div className="mt-3 rounded-xl border border-[var(--line)] bg-[var(--bg)]/50 px-3 py-2.5">
-                      <div className="text-xs font-medium uppercase tracking-wide text-[var(--muted)]">
-                        Why the competitor is ahead
-                      </div>
-                      <p className="mt-1.5 text-sm leading-relaxed text-[var(--muted)]">{rec.why}</p>
-                    </div>
-                  ) : null}
-
-                  <div className="mt-4 flex flex-wrap items-center gap-2">
-                    <Button
-                      disabled={!!busy}
-                      onClick={() =>
-                        addWishlist({
-                          feature_name: rec.feature_name,
-                          category: rec.category || "General",
-                          description: rec.recommendation,
-                        })
-                      }
-                    >
-                      {busy === "wish" ? "Saving…" : "Save to build list"}
-                    </Button>
-                    <Button variant="ghost" onClick={() => setTab("wishlist")}>
-                      Open build list
-                    </Button>
-                    {rec.competitor_id ? (
-                      <Button
-                        variant="ghost"
-                        onClick={() => {
-                          setSelectedCompetitorId(rec.competitor_id);
-                          setTab("competitors");
-                        }}
-                      >
-                        Compare with {rec.competitor_name}
-                      </Button>
-                    ) : null}
-                  </div>
-                  <p className="mt-3 text-xs text-[var(--muted)]">
-                    Saving adds this idea to Build list so your team can turn it into concrete next steps later.
-                  </p>
-                </Card>
-              );
-            })}
-
-            {loopRecs.length === 0 ? (
+            {!competitors.length && !activeAlerts.length ? (
               <Card>
-                <h2 className="font-semibold">No ideas yet</h2>
+                <h2 className="font-semibold">Nothing to review yet</h2>
                 <p className="mt-2 text-sm leading-relaxed text-[var(--muted)] mb-4">
-                  Run a competitor check first. We’ll find what rivals offer, what’s missing for {client.name}, and
-                  suggest clear next moves you can save to the build list.
+                  Run a competitor check first. We’ll find rivals for {client.name}, compare what they offer, and open
+                  warnings you can clear from the Warnings tab.
                 </p>
                 <Button onClick={runIntel} disabled={!!busy}>
                   {busy === "pack" ? "Working…" : "Check competitors"}
@@ -1208,17 +1186,23 @@ function ClientDetailPageInner() {
                       </div>
                     ) : null}
                     <div className="flex flex-wrap gap-2 mt-3">
-                      <Button
-                        onClick={() =>
-                          addWishlist({
-                            feature_name: row.feature_name,
-                            category: row.category || "General",
-                            description: row.how_to_improve || row.note,
-                          })
-                        }
-                      >
-                        Save to build list
-                      </Button>
+                      {(() => {
+                        const bl = buildListButton(row.feature_name);
+                        return (
+                          <Button
+                            disabled={bl.disabled}
+                            onClick={() =>
+                              addWishlist({
+                                feature_name: row.feature_name,
+                                category: row.category || "General",
+                                description: row.how_to_improve || row.note,
+                              })
+                            }
+                          >
+                            {bl.label}
+                          </Button>
+                        );
+                      })()}
                       <Button
                         variant="ghost"
                         disabled={!!busy}
@@ -1284,19 +1268,25 @@ function ClientDetailPageInner() {
                         <div className="font-medium">{f.name}</div>
                         <div className="text-xs text-[var(--muted)]">{f.category || f.status || "Feature"}</div>
                         <p className="text-sm text-[var(--muted)] mt-1 leading-relaxed">{f.description || "—"}</p>
-                        <Button
-                          className="mt-2"
-                          variant="ghost"
-                          onClick={() =>
-                            addWishlist({
-                              feature_name: f.name,
-                              category: f.category || "General",
-                              description: f.description || "",
-                            })
-                          }
-                        >
-                          Save to build list
-                        </Button>
+                        {(() => {
+                          const bl = buildListButton(f.name);
+                          return (
+                            <Button
+                              className="mt-2"
+                              variant="ghost"
+                              disabled={bl.disabled}
+                              onClick={() =>
+                                addWishlist({
+                                  feature_name: f.name,
+                                  category: f.category || "General",
+                                  description: f.description || "",
+                                })
+                              }
+                            >
+                              {bl.label}
+                            </Button>
+                          );
+                        })()}
                       </div>
                     ))}
                     {!(competitorDetail?.features || []).length ? (
@@ -1348,16 +1338,23 @@ function ClientDetailPageInner() {
                   </div>
                 ) : null}
                 <div className="flex flex-wrap gap-2 mt-3">
-                  <Button
-                    onClick={() =>
-                      addWishlist({
-                        feature_name: alert.title.slice(0, 80),
-                        description: alert.action,
-                      })
-                    }
-                  >
-                    Save to build list
-                  </Button>
+                  {(() => {
+                    const featureName = alert.title.slice(0, 80);
+                    const bl = buildListButton(featureName);
+                    return (
+                      <Button
+                        disabled={bl.disabled}
+                        onClick={() =>
+                          addWishlist({
+                            feature_name: featureName,
+                            description: alert.action,
+                          })
+                        }
+                      >
+                        {bl.label}
+                      </Button>
+                    );
+                  })()}
                   <Button variant="ghost" disabled={!!busy} onClick={() => markAlertDone(alert.id)}>
                     {busy === `alert-${alert.id}` ? "Updating..." : "Mark done"}
                   </Button>

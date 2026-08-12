@@ -29,7 +29,8 @@ export default function ReportsPage() {
     setLoading(true);
     setError("");
     try {
-      const list = await api<any[]>("/api/clients");
+      // Include archived clients so older reports remain reachable from All reports.
+      const list = await api<any[]>("/api/clients?include_inactive=true");
       setClients(list);
       if (!list.length) {
         setReports([]);
@@ -41,11 +42,16 @@ export default function ReportsPage() {
         ),
       );
       setReports(
-        all.flat().map((r, idx) => ({
-          ...r,
-          client_name: list.find((c) => c.id === r.client_id)?.name || "Client",
-          _k: `${r.id}-${idx}`,
-        })),
+        all.flat().map((r, idx) => {
+          const client = list.find((c) => c.id === r.client_id);
+          const name = client?.name || "Client";
+          const archived = client && client.is_active === false;
+          return {
+            ...r,
+            client_name: archived ? `${name} (archived)` : name,
+            _k: `${r.id}-${idx}`,
+          };
+        }),
       );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load reports");
@@ -143,7 +149,7 @@ export default function ReportsPage() {
               <option value="all">All companies</option>
               {clients.map((c) => (
                 <option key={c.id} value={c.id}>
-                  {c.name}
+                  {c.is_active === false ? `${c.name} (archived)` : c.name}
                 </option>
               ))}
             </select>
