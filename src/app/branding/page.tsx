@@ -44,19 +44,27 @@ export default function BrandingPage() {
     e.preventDefault();
     setError("");
     setMessage("");
+    const name = form.name.trim();
+    if (!name) {
+      setError("Enter an agency name.");
+      return;
+    }
+    const brand_color = toColorInput(form.brand_color, "#0f766e");
+    const brand_secondary = toColorInput(form.brand_secondary, "#134e4a");
     setSaving(true);
     try {
       await api("/api/agency/branding", {
         method: "PATCH",
         body: JSON.stringify({
-          ...form,
-          brand_color: toColorInput(form.brand_color, "#0f766e"),
-          brand_secondary: toColorInput(form.brand_secondary, "#134e4a"),
+          name,
+          brand_color,
+          brand_secondary,
           logo_url: form.logo_url.trim() || null,
           report_footer: form.report_footer.trim() || null,
         }),
       });
       await refresh();
+      setForm((f) => ({ ...f, name, brand_color, brand_secondary }));
       setMessage("Branding saved. Sidebar, accents, and new PDFs now use these settings.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Save failed");
@@ -90,7 +98,7 @@ export default function BrandingPage() {
                 <Input
                   type="color"
                   className="h-11 w-16 p-1"
-                  value={form.brand_color}
+                  value={toColorInput(form.brand_color, "#0f766e")}
                   onChange={(e) => setForm({ ...form, brand_color: e.target.value })}
                 />
                 <Input
@@ -106,7 +114,7 @@ export default function BrandingPage() {
                 <Input
                   type="color"
                   className="h-11 w-16 p-1"
-                  value={form.brand_secondary}
+                  value={toColorInput(form.brand_secondary, "#134e4a")}
                   onChange={(e) => setForm({ ...form, brand_secondary: e.target.value })}
                 />
                 <Input
