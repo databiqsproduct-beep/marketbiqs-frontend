@@ -11,15 +11,13 @@ import {
   FileText,
   HelpCircle,
   LifeBuoy,
-  Radar,
   Search,
   X,
 } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { RivalPulseBar } from "@/components/Charts";
-import { IntelProgressOverlay, IntelRunPhase, useIntelProgress } from "@/components/IntelProgress";
 import { Button, Card, Input, PageHeader } from "@/components/ui";
-import { api, runClientAutoIntel } from "@/lib/api";
+import { api, streamHelpdeskChat } from "@/lib/api";
 
 type PortfolioRow = {
   id: string;
@@ -71,7 +69,6 @@ const TIP_KEY = "biqs_dashboard_tip_dismissed";
 const FILTER_KEY = "biqs_dashboard_filter";
 const QUERY_KEY = "biqs_dashboard_query";
 const STALE_MS = 7 * 24 * 60 * 60 * 1000;
-const BULK_INTEL_LIMIT = 3;
 
 const GUIDE_STEPS = [
   {
@@ -211,7 +208,9 @@ function nextActionFor(c: PortfolioRow & { health: Health; uniqueFeatures: numbe
   label: string;
   href: string | null;
 } {
-  if ((c.rivals ?? 0) === 0 || !c.last_intel_at) return { label: "Check competitors", href: null };
+  if ((c.rivals ?? 0) === 0 || !c.last_intel_at) {
+    return { label: "Check competitors", href: `/clients/${c.id}` };
+  }
   if ((c.alerts ?? 0) > 0) {
     return {
       label: `Review ${c.alerts} warning${c.alerts === 1 ? "" : "s"}`,
@@ -295,9 +294,20 @@ function PortfolioSkeleton() {
 function DashboardHelp() {
   const [guideOpen, setGuideOpen] = useState(false);
   const [supportOpen, setSupportOpen] = useState(false);
-  const [topic, setTopic] = useState("Getting started");
   const [message, setMessage] = useState("");
-  const [sent, setSent] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [clientId, setClientId] = useState("");
+  const [clients, setClients] = useState<{ id: string; name: string }[]>([]);
+  const [quickOptions, setQuickOptions] = useState<{ label: string; ask: string }[]>([]);
+  const [thread, setThread] = useState<{ role: "user" | "assistant"; content: string }[]>([
+    {
+      role: "assistant",
+      content:
+        "Hi — ask how to use MarketBiqs, fix a problem, or ask about a client’s competitors. Pick a client below for rival/intel answers.",
+    },
+  ]);
+  const threadEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!guideOpen && !supportOpen) return;
@@ -311,31 +321,105 @@ function DashboardHelp() {
     return () => document.removeEventListener("keydown", onKey);
   }, [guideOpen, supportOpen]);
 
+  useEffect(() => {
+    if (!supportOpen) return;
+    threadEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [supportOpen, thread, busy]);
+
+  useEffect(() => {
+    if (!supportOpen) return;
+    api<{ id: string; name: string }[]>("/api/clients")
+      .then((data) => setClients(data || []))
+      .catch(() => setClients([]));
+    api<{ faqs: { question: string }[]; common_issues: { symptom: string }[] }>("/api/helpdesk/knowledge")
+      .then((data) => {
+        const faqs = (data.faqs || []).slice(0, 4).map((f) => ({
+          label: f.question,
+          ask: f.question,
+        }));
+        const issues = (data.common_issues || []).slice(0, 3).map((i) => ({
+          label: `Fix: ${i.symptom}`,
+          ask: `I'm hitting this issue: ${i.symptom}. How do I fix it?`,
+        }));
+        setQuickOptions([...faqs, ...issues]);
+      })
+      .catch(() => setQuickOptions([]));
+  }, [supportOpen]);
+
   function openSupport() {
     setGuideOpen(false);
     setSupportOpen((v) => !v);
-    setSent(false);
+    setError("");
   }
 
-  function submitHelp(e: FormEvent) {
-    e.preventDefault();
-    if (!message.trim()) return;
-    setSent(true);
+  async function askHelpDesk(text: string) {
+    const cleaned = text.trim();
+    if (!cleaned || busy) return;
+    setError("");
     setMessage("");
+    setBusy(true);
+    const history = thread
+      .filter((m) => m.content.trim())
+      .map((m) => ({ role: m.role, content: m.content }));
+    setThread((prev) => [...prev, { role: "user", content: cleaned }, { role: "assistant", content: "" }]);
+    try {
+      await streamHelpdeskChat(cleaned, {
+        clientId: clientId || undefined,
+        history,
+        onDelta: (delta) => {
+          setThread((prev) => {
+            const next = [...prev];
+            const last = next[next.length - 1];
+            if (last?.role === "assistant") {
+              next[next.length - 1] = { ...last, content: last.content + delta };
+            }
+            return next;
+          });
+        },
+        onDone: (msg) => {
+          setThread((prev) => {
+            const next = [...prev];
+            const last = next[next.length - 1];
+            if (last?.role === "assistant") {
+              next[next.length - 1] = { ...last, content: msg.content || last.content };
+            }
+            return next;
+          });
+        },
+      });
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : "Help desk failed";
+      setError(detail);
+      setThread((prev) => {
+        const next = [...prev];
+        const last = next[next.length - 1];
+        if (last?.role === "assistant" && !last.content.trim()) {
+          next[next.length - 1] = { role: "assistant", content: `Sorry — ${detail}` };
+        }
+        return next;
+      });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function submitHelp(e: FormEvent) {
+    e.preventDefault();
+    await askHelpDesk(message);
   }
 
   return (
     <>
       <div className="fixed bottom-5 right-4 z-[60] flex flex-col items-end gap-2 sm:bottom-6 sm:right-6">
         {supportOpen ? (
-          <div className="mb-1 w-[min(22rem,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--panel)] shadow-[0_16px_48px_rgba(20,35,31,0.18)]">
-            <div className="flex items-start justify-between gap-3 border-b border-[var(--line)] bg-[var(--accent-soft)]/60 px-4 py-3">
+          <div className="mb-1 flex max-h-[min(34rem,calc(100vh-6rem))] w-[min(22rem,calc(100vw-2rem))] flex-col overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--panel)] shadow-[0_16px_48px_rgba(20,35,31,0.18)]">
+            <div className="flex shrink-0 items-start justify-between gap-3 border-b border-[var(--line)] bg-[var(--accent-soft)]/60 px-4 py-3">
               <div>
                 <div className="flex items-center gap-2 text-[var(--accent)]">
                   <LifeBuoy size={18} />
                   <h3 className="font-semibold text-[var(--ink)]">Help desk</h3>
                 </div>
-                <p className="mt-1 text-xs text-[var(--muted)]">Demo support · usually replies in a few minutes</p>
+                <p className="mt-1 text-xs text-[var(--muted)]">Product help · clients & competitors</p>
               </div>
               <button
                 type="button"
@@ -347,60 +431,80 @@ function DashboardHelp() {
               </button>
             </div>
 
-            <div className="space-y-3 px-4 py-3">
-              <div className="rounded-xl bg-black/[0.03] px-3 py-2.5 text-sm text-[var(--ink)]">
-                Hi — tell us what you need help with. For demos, pick a topic and send a short note.
+            <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-3">
+              <div className="space-y-2">
+                {thread.map((m, i) => (
+                  <div
+                    key={`${m.role}-${i}`}
+                    className={`rounded-xl px-3 py-2 text-sm whitespace-pre-wrap ${
+                      m.role === "user"
+                        ? "ml-6 bg-[var(--accent-soft)]/70 text-[var(--ink)]"
+                        : "mr-2 bg-black/[0.03] text-[var(--ink)]"
+                    }`}
+                  >
+                    {m.content || (busy && i === thread.length - 1 ? "…" : "")}
+                  </div>
+                ))}
+                <div ref={threadEndRef} />
               </div>
 
-              {sent ? (
-                <div className="rounded-xl border border-[var(--accent)]/25 bg-[var(--accent-soft)]/50 px-3 py-2.5 text-sm text-[var(--ink)]">
-                  Thanks — your request was sent to the help desk. We’ll get back shortly.
-                  <button
-                    type="button"
-                    className="mt-2 block text-sm font-medium text-[var(--accent)] hover:underline"
-                    onClick={() => setSent(false)}
-                  >
-                    Send another
-                  </button>
-                </div>
-              ) : (
-                <form onSubmit={submitHelp} className="space-y-3">
-                  <div>
-                    <label className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-[var(--muted)]">
-                      Topic
-                    </label>
-                    <select
-                      className="w-full rounded-xl border border-[var(--line)] bg-white px-3 py-2.5 text-sm"
-                      value={topic}
-                      onChange={(e) => setTopic(e.target.value)}
-                    >
-                      <option>Getting started</option>
-                      <option>Run intel</option>
-                      <option>Clients & portfolio</option>
-                      <option>Reports & delivery</option>
-                      <option>Billing</option>
-                      <option>Something else</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-[var(--muted)]">
-                      How can we help?
-                    </label>
-                    <textarea
-                      className="min-h-[88px] w-full resize-none rounded-xl border border-[var(--line)] bg-white px-3 py-2.5 text-sm outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent-soft)]"
-                      placeholder="Describe the issue in a sentence or two…"
-                      value={message}
-                      onChange={(e) => setMessage(e.target.value)}
-                      required
-                    />
-                  </div>
-                  <Button type="submit" className="w-full">
-                    Send to help desk
-                  </Button>
-                </form>
-              )}
+              {error ? <p className="text-xs text-red-600">{error}</p> : null}
+            </div>
 
-              <div className="flex flex-wrap gap-2 border-t border-[var(--line)] pt-3">
+            <div className="shrink-0 space-y-2 border-t border-[var(--line)] px-4 py-3">
+              <select
+                className="w-full rounded-xl border border-[var(--line)] bg-white px-3 py-2 text-sm"
+                value={clientId}
+                onChange={(e) => setClientId(e.target.value)}
+                disabled={busy}
+                aria-label="Client for competitor questions"
+              >
+                <option value="">All clients (or name one in chat)</option>
+                {clients.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+
+              {quickOptions.length ? (
+                <select
+                  className="w-full rounded-xl border border-[var(--line)] bg-white px-3 py-2 text-sm text-[var(--muted)]"
+                  defaultValue=""
+                  disabled={busy}
+                  aria-label="Quick ask"
+                  onChange={(e) => {
+                    const ask = e.target.value;
+                    e.target.value = "";
+                    if (ask) void askHelpDesk(ask);
+                  }}
+                >
+                  <option value="" disabled>
+                    Quick ask…
+                  </option>
+                  {quickOptions.map((opt) => (
+                    <option key={opt.ask} value={opt.ask}>
+                      {opt.label.length > 64 ? `${opt.label.slice(0, 61)}…` : opt.label}
+                    </option>
+                  ))}
+                </select>
+              ) : null}
+
+              <form onSubmit={(e) => void submitHelp(e)} className="space-y-2">
+                <textarea
+                  className="min-h-[64px] w-full resize-none rounded-xl border border-[var(--line)] bg-white px-3 py-2.5 text-sm outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent-soft)]"
+                  placeholder="Ask a FAQ, issue, or “who are rivals for …?”"
+                  value={message}
+                  onChange={(e) => setMessage(e.target.value)}
+                  required
+                  disabled={busy}
+                />
+                <Button type="submit" className="w-full" disabled={busy || !message.trim()}>
+                  {busy ? "Thinking…" : "Ask help desk"}
+                </Button>
+              </form>
+
+              <div className="flex gap-2">
                 <Button
                   type="button"
                   variant="ghost"
@@ -410,18 +514,15 @@ function DashboardHelp() {
                     setGuideOpen(true);
                   }}
                 >
-                  Open App Guide
+                  App Guide
                 </Button>
                 <button
                   type="button"
-                  className="flex-1 rounded-xl border border-[var(--line)] px-3 py-2 text-xs font-medium hover:bg-black/5"
-                  onClick={() => {
-                    setTopic("Getting started");
-                    setMessage("How do I add my first client and run intel?");
-                    setSent(false);
-                  }}
+                  className="flex-1 rounded-xl border border-[var(--line)] px-3 py-2 text-xs font-medium hover:bg-black/5 disabled:opacity-50"
+                  disabled={busy}
+                  onClick={() => void askHelpDesk("How do I add my first client and run intel?")}
                 >
-                  Quick question
+                  Quick start
                 </button>
               </div>
             </div>
@@ -507,19 +608,9 @@ export default function DashboardPage() {
   const [sortKey, setSortKey] = useState<SortKey>("health");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [tipVisible, setTipVisible] = useState(false);
-  const [busyId, setBusyId] = useState("");
-  const [bulkBusy, setBulkBusy] = useState(false);
-  const [justUpdatedId, setJustUpdatedId] = useState("");
-  const [intelName, setIntelName] = useState("");
-  const [intelOpen, setIntelOpen] = useState(false);
-  const [intelPhase, setIntelPhase] = useState<IntelRunPhase>("running");
-  const [intelSuccess, setIntelSuccess] = useState("");
-  const [intelError, setIntelError] = useState("");
   const [expandedId, setExpandedId] = useState("");
   const [detailsById, setDetailsById] = useState<Record<string, RowDetails>>({});
   const searchRef = useRef<HTMLInputElement>(null);
-  const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const intelProgress = useIntelProgress(intelOpen && intelPhase === "running");
 
   async function loadRowDetails(clientId: string) {
     setDetailsById((prev) => ({
@@ -696,6 +787,26 @@ export default function DashboardPage() {
     }
   }
 
+  async function archiveClient(clientId: string, clientName: string) {
+    if (
+      !window.confirm(
+        `Archive “${clientName}”? Tracking stops and it leaves your active list. Reports stay saved.`,
+      )
+    ) {
+      return;
+    }
+    setError("");
+    setMessage("");
+    try {
+      await api(`/api/clients/${clientId}`, { method: "DELETE" });
+      setMessage(`Archived ${clientName}`);
+      if (expandedId === clientId) setExpandedId("");
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not archive client");
+    }
+  }
+
   useEffect(() => {
     load().catch(() => {
       /* error already set */
@@ -735,11 +846,6 @@ export default function DashboardPage() {
     return () => document.removeEventListener("keydown", onKey);
   }, []);
 
-  useEffect(() => {
-    return () => {
-      if (flashTimer.current) clearTimeout(flashTimer.current);
-    };
-  }, []);
 
   function dismissTip() {
     setTipVisible(false);
@@ -750,11 +856,6 @@ export default function DashboardPage() {
     }
   }
 
-  function flashUpdated(clientId: string) {
-    setJustUpdatedId(clientId);
-    if (flashTimer.current) clearTimeout(flashTimer.current);
-    flashTimer.current = setTimeout(() => setJustUpdatedId(""), 4000);
-  }
 
   const latestByClient = useMemo(() => {
     const map = new Map<string, string>();
@@ -791,10 +892,6 @@ export default function DashboardPage() {
     [enriched],
   );
 
-  const bulkTargets = useMemo(
-    () => needsAttention.filter((c) => c.is_active).slice(0, BULK_INTEL_LIMIT),
-    [needsAttention],
-  );
 
   const visiblePortfolio = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -824,7 +921,6 @@ export default function DashboardPage() {
   const totalUnique = enriched.reduce((s, c) => s + c.uniqueFeatures, 0);
   const totalThreats = enriched.reduce((s, c) => s + c.threats, 0);
   const nextClient = needsAttention[0] || enriched[0] || null;
-  const isBusy = !!busyId || bulkBusy;
 
   function toggleSort(key: SortKey) {
     if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
@@ -834,89 +930,14 @@ export default function DashboardPage() {
     }
   }
 
-  async function runIntel(clientId: string, name: string, opts?: { quiet?: boolean }) {
-    setBusyId(clientId);
-    setIntelName(name);
-    setError("");
-    if (!opts?.quiet) setMessage("");
-    setIntelSuccess("");
-    setIntelError("");
-    setIntelPhase("running");
-    setIntelOpen(true);
-    try {
-      const res = await runClientAutoIntel(clientId);
-      const summary = `Done for ${name} · ${res.enrich?.features || 0} features · ${res.pack?.competitors || 0} competitors`;
-      if (!opts?.quiet) setMessage(summary);
-      setIntelSuccess(summary);
-      setIntelPhase("success");
-      flashUpdated(clientId);
-      await load();
-      return true;
-    } catch (err) {
-      const detail = err instanceof Error ? err.message : "Intel run failed";
-      setError(detail);
-      setIntelError(detail);
-      setIntelPhase("error");
-      return false;
-    } finally {
-      setBusyId("");
-    }
-  }
-
-  async function runBulkIntel() {
-    if (!bulkTargets.length || isBusy) return;
-    setBulkBusy(true);
-    setError("");
-    setMessage("");
-    let ok = 0;
-    for (const c of bulkTargets) {
-      const success = await runIntel(c.id, c.name, { quiet: true });
-      if (success) ok += 1;
-      else break;
-    }
-    if (ok > 0) {
-      setMessage(
-        ok === bulkTargets.length
-          ? `Updated ${ok} attention client${ok === 1 ? "" : "s"}`
-          : `Updated ${ok} of ${bulkTargets.length} — stopped on error`,
-      );
-    }
-    setBulkBusy(false);
-  }
-
   function onSearch(e: FormEvent) {
     e.preventDefault();
   }
 
-  function rowClass(c: EnrichedRow) {
-    const base =
-      "border-b border-[var(--line)] last:border-0 align-middle transition-colors hover:bg-black/[0.015]";
-    if (justUpdatedId === c.id) return `${base} bg-[var(--accent-soft)]/55`;
-    return base;
-  }
-
-  function mobileCardClass(c: EnrichedRow) {
-    const base = "rounded-xl border border-[var(--line)] p-3 transition-colors";
-    if (justUpdatedId === c.id) return `${base} border-[var(--accent)]/40 bg-[var(--accent-soft)]/50`;
-    return base;
-  }
-
   function NextActionCell({ c }: { c: EnrichedRow }) {
-    if (!c.nextHref) {
-      return (
-        <button
-          type="button"
-          onClick={() => runIntel(c.id, c.name)}
-          disabled={isBusy}
-          className="font-medium text-[var(--accent)] hover:underline disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] rounded"
-        >
-          {c.nextAction}
-        </button>
-      );
-    }
     return (
       <Link
-        href={c.nextHref}
+        href={c.nextHref || `/clients/${c.id}`}
         className="font-medium text-[var(--accent)] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] rounded"
       >
         {c.nextAction}
@@ -925,42 +946,14 @@ export default function DashboardPage() {
   }
 
   function ActionButtons({ c, compact }: { c: EnrichedRow; compact?: boolean }) {
-    const neverScanned = c.lastScannedLabel === "Not checked yet";
     const btn = compact ? "!px-2.5 !py-1.5 text-xs" : "!px-3 !py-2 text-xs";
     return (
       <div className="flex flex-wrap gap-1.5">
-        {neverScanned ? (
-          <Button className={btn} onClick={() => runIntel(c.id, c.name)} disabled={isBusy} title="Check competitors">
-            {busyId === c.id ? (
-              "…"
-            ) : (
-              <span className="inline-flex items-center gap-1">
-                <Radar size={12} /> {compact ? "Check" : "Check competitors"}
-              </span>
-            )}
-          </Button>
-        ) : null}
         <Link href={`/clients/${c.id}`}>
           <Button variant="ghost" className={btn} title="Open client">
             Open
           </Button>
         </Link>
-        {!neverScanned ? (
-          <Button
-            className={btn}
-            onClick={() => runIntel(c.id, c.name)}
-            disabled={isBusy}
-            title="Check competitors again"
-          >
-            {busyId === c.id ? (
-              "…"
-            ) : (
-              <span className="inline-flex items-center gap-1">
-                <Radar size={12} /> {compact ? "Check" : "Check again"}
-              </span>
-            )}
-          </Button>
-        ) : null}
         <Link href={`/clients/${c.id}?tab=reports`}>
           <Button variant="ghost" className={btn} title="Reports">
             <span className="inline-flex items-center gap-1">
@@ -968,38 +961,36 @@ export default function DashboardPage() {
             </span>
           </Button>
         </Link>
+        <Button
+          variant="ghost"
+          className={`${btn} !border-red-200 !text-red-700 hover:!bg-red-50`}
+          title="Archive client"
+          onClick={() => void archiveClient(c.id, c.name)}
+        >
+          Archive
+        </Button>
       </div>
     );
   }
 
+  function rowClass(_c: EnrichedRow) {
+    return "border-b border-[var(--line)] last:border-0 align-middle transition-colors hover:bg-black/[0.015]";
+  }
+
+  function mobileCardClass(_c: EnrichedRow) {
+    return "rounded-xl border border-[var(--line)] p-3 transition-colors";
+  }
+
   return (
     <AppShell>
-      <IntelProgressOverlay
-        open={intelOpen}
-        phase={intelPhase}
-        clientName={intelName}
-        stepIndex={intelProgress.stepIndex}
-        progress={intelProgress.progress}
-        elapsedMs={intelProgress.elapsedMs}
-        tipIndex={intelProgress.tipIndex}
-        successMessage={intelSuccess}
-        errorMessage={intelError}
-        onDismiss={() => setIntelOpen(false)}
-      />
       <PageHeader
         title="Your clients at a glance"
         subtitle="Plain view of each brand: how they’re doing, what competitors have, and what to do next."
         actions={
           nextClient ? (
-            nextClient.rivals === 0 || !nextClient.last_intel_at ? (
-              <Button onClick={() => runIntel(nextClient.id, nextClient.name)} disabled={isBusy}>
-                {busyId === nextClient.id ? "Working…" : "Check competitors"}
-              </Button>
-            ) : (
-              <Link href={nextClient.nextHref || `/clients/${nextClient.id}`}>
-                <Button>{needsAttention.length ? "Fix next client" : "Open client"}</Button>
-              </Link>
-            )
+            <Link href={nextClient.nextHref || `/clients/${nextClient.id}`}>
+              <Button>{needsAttention.length ? "Fix next client" : "Open client"}</Button>
+            </Link>
           ) : (
             <Link href="/clients">
               <Button>Add a client</Button>
@@ -1036,8 +1027,7 @@ export default function DashboardPage() {
               <div className="flex items-start justify-between gap-3">
                 <p className="text-sm text-[var(--ink)]">
                   <span className="font-semibold">Tip:</span> start with red or amber Health, then follow{" "}
-                  <span className="font-medium">Next step</span>. If a client was never checked, click{" "}
-                  <span className="font-medium">Check competitors</span>. Press{" "}
+                  <span className="font-medium">Next step</span>. Open a client to run Check competitors. Press{" "}
                   <kbd className="rounded border border-[var(--line)] bg-white px-1.5 py-0.5 text-xs">/</kbd> to search.
                 </p>
                 <button
@@ -1083,19 +1073,6 @@ export default function DashboardPage() {
                       </p>
                     </div>
                     <div className="flex flex-wrap gap-2">
-                      {bulkTargets.length > 0 ? (
-                        <Button
-                          type="button"
-                          className="!border-amber-200 !bg-white/90 text-amber-950"
-                          variant="ghost"
-                          onClick={runBulkIntel}
-                          disabled={isBusy}
-                        >
-                          {bulkBusy
-                            ? "Updating…"
-                            : `Update ${bulkTargets.length} client${bulkTargets.length === 1 ? "" : "s"}`}
-                        </Button>
-                      ) : null}
                       {needsAttention.slice(0, 3).map((c) => (
                         <Link key={c.id} href={c.nextHref || `/clients/${c.id}`}>
                           <Button variant="ghost" className="!border-amber-200 !bg-white/70">

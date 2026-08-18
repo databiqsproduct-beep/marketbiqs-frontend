@@ -123,7 +123,7 @@ export async function runClientIntel(
     competitor_scope: "global" | "local";
     competitor_country?: string;
     competitor_count: number;
-    competitor_mode?: "update" | "add";
+    competitor_mode?: "update" | "add" | "replace";
   },
 ): Promise<IntelJob> {
   const started = await api<{ job_id: string; status: string }>(`/api/clients/${clientId}/auto-run`, {
@@ -240,11 +240,14 @@ type StreamHandlers = {
   signal?: AbortSignal;
 };
 
-/** Stream assistant reply via SSE (`/chat/stream`). */
-export async function streamChat(
-  clientId: string,
+/** Stream help desk reply via SSE (`/api/helpdesk/chat/stream`) — uses platform GROQ_API_KEY. */
+export async function streamHelpdeskChat(
   message: string,
-  handlers: StreamHandlers = {},
+  handlers: StreamHandlers & {
+    topic?: string;
+    clientId?: string;
+    history?: { role: string; content: string }[];
+  } = {},
 ): Promise<void> {
   const headers = new Headers({ "Content-Type": "application/json" });
   const token = getToken();
@@ -252,15 +255,20 @@ export async function streamChat(
   const agencyId = getAgencyId();
   if (agencyId) headers.set("X-Agency-Id", agencyId);
 
-  const res = await fetch(`${apiBase()}/api/clients/${clientId}/chat/stream`, {
+  const res = await fetch(`${apiBase()}/api/helpdesk/chat/stream`, {
     method: "POST",
     headers,
-    body: JSON.stringify({ message }),
+    body: JSON.stringify({
+      message,
+      topic: handlers.topic || undefined,
+      client_id: handlers.clientId || undefined,
+      history: handlers.history || [],
+    }),
     signal: handlers.signal,
   });
 
   if (!res.ok) {
-    let detail = "Chat failed";
+    let detail = "Help desk failed";
     try {
       const data = (await res.json()) as ApiError;
       if (typeof data.detail === "string") detail = data.detail;
@@ -292,16 +300,21 @@ export async function streamChat(
       if (!line) continue;
       const raw = line.replace(/^data:\s?/, "");
       if (!raw || raw === "[DONE]") continue;
-      let event: { type?: string; message?: ChatMessage; content?: string; detail?: string };
+      let event: { type?: string; content?: string; detail?: string };
       try {
         event = JSON.parse(raw);
       } catch {
         continue;
       }
-      if (event.type === "user" && event.message) handlers.onUser?.(event.message);
-      else if (event.type === "delta" && event.content) handlers.onDelta?.(event.content);
-      else if (event.type === "done" && event.message) handlers.onDone?.(event.message);
-      else if (event.type === "error") {
+      if (event.type === "delta" && event.content) handlers.onDelta?.(event.content);
+      else if (event.type === "done" && event.content) {
+        handlers.onDone?.({
+          id: `help-${Date.now()}`,
+          role: "assistant",
+          content: event.content,
+          created_at: new Date().toISOString(),
+        });
+      } else if (event.type === "error") {
         handlers.onError?.(event.detail || "Stream error");
         throw new Error(event.detail || "Stream error");
       }

@@ -6,7 +6,8 @@ import { getSupabaseBrowser } from "@/lib/supabase";
 import { setSession } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 
-export default function AuthCallbackPage() {
+/** After server exchanged the OAuth code, hydrate the API Bearer token and route the user. */
+export default function AuthCompletePage() {
   const router = useRouter();
   const { refresh } = useAuth();
   const [error, setError] = useState("");
@@ -22,21 +23,22 @@ export default function AuthCallbackPage() {
       }
 
       try {
-        // Handle ?code= PKCE exchange when present
-        const url = new URL(window.location.href);
-        const code = url.searchParams.get("code");
-        if (code) {
-          const { error: exchangeError } = await sb.auth.exchangeCodeForSession(code);
-          if (exchangeError) throw exchangeError;
-        }
-
+        // Session cookies were set by /auth/callback (route handler).
         const { data, error: sessionError } = await sb.auth.getSession();
         if (sessionError) throw sessionError;
-        if (!data.session?.access_token) {
-          throw new Error("No session after sign-in. Try again.");
+
+        let token = data.session?.access_token || "";
+        if (!token) {
+          // Brief retry — cookie propagation can lag one tick after redirect.
+          await new Promise((r) => setTimeout(r, 200));
+          const again = await sb.auth.getSession();
+          token = again.data.session?.access_token || "";
+        }
+        if (!token) {
+          throw new Error("Signed in with Google, but no session cookie was found. Try again from Login.");
         }
 
-        setSession(data.session.access_token, null);
+        setSession(token, null);
         const me = await refresh();
         if (cancelled) return;
 
