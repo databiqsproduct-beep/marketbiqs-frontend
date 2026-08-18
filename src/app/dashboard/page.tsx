@@ -34,7 +34,7 @@ type PortfolioRow = {
   last_intel_at?: string | null;
 };
 
-type Health = "Needs attention" | "Watch" | "Healthy" | "Paused";
+type Health = "Needs attention" | "Watch" | "Healthy" | "Not started" | "Paused";
 type SortKey = "name" | "health" | "rivals" | "uniqueFeatures";
 
 type Dashboard = {
@@ -101,12 +101,14 @@ const GUIDE_STEPS = [
 const HEALTH_ORDER: Record<Health, number> = {
   "Needs attention": 0,
   Watch: 1,
-  Healthy: 2,
-  Paused: 3,
+  "Not started": 2,
+  Healthy: 3,
+  Paused: 4,
 };
 
 function healthFor(c: PortfolioRow): Health {
   if (!c.is_active) return "Paused";
+  if ((c.rivals ?? 0) === 0 || !c.last_intel_at) return "Not started";
   const alerts = c.alerts ?? 0;
   const gaps = c.gaps ?? 0;
   if (alerts >= 5 || gaps >= 8) return "Needs attention";
@@ -116,21 +118,24 @@ function healthFor(c: PortfolioRow): Health {
 
 function statusBadge(isActive: boolean) {
   return isActive
-    ? "inline-flex items-center rounded-full bg-[var(--accent-soft)] px-2.5 py-0.5 text-xs font-medium text-[var(--accent)]"
-    : "inline-flex items-center rounded-full bg-red-50 px-2.5 py-0.5 text-xs font-medium text-red-600";
+    ? "inline-flex items-center rounded-md bg-[var(--accent-soft)] px-2 py-0.5 text-[11px] font-medium text-[var(--accent)]"
+    : "inline-flex items-center rounded-md bg-red-50 px-2 py-0.5 text-[11px] font-medium text-red-600";
 }
 
 function healthBadge(health: Health) {
   if (health === "Healthy") {
-    return "inline-flex items-center rounded-full bg-[var(--accent-soft)] px-2.5 py-0.5 text-xs font-medium text-[var(--accent)]";
+    return "inline-flex items-center rounded-md bg-[var(--accent-soft)] px-2 py-0.5 text-[11px] font-medium text-[var(--accent)]";
   }
   if (health === "Watch") {
-    return "inline-flex items-center rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-medium text-amber-800";
+    return "inline-flex items-center rounded-md bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-800";
   }
   if (health === "Needs attention") {
-    return "inline-flex items-center rounded-full bg-red-50 px-2.5 py-0.5 text-xs font-medium text-red-700";
+    return "inline-flex items-center rounded-md bg-red-50 px-2 py-0.5 text-[11px] font-medium text-red-700";
   }
-  return "inline-flex items-center rounded-full bg-black/[0.04] px-2.5 py-0.5 text-xs font-medium text-[var(--muted)]";
+  if (health === "Not started") {
+    return "inline-flex items-center rounded-md bg-black/[0.05] px-2 py-0.5 text-[11px] font-medium text-[var(--muted)]";
+  }
+  return "inline-flex items-center rounded-md bg-black/[0.04] px-2 py-0.5 text-[11px] font-medium text-[var(--muted)]";
 }
 
 const COLOR_KEY = [
@@ -152,20 +157,23 @@ const COLOR_KEY = [
 ];
 
 const COLUMN_HELP: { label: string; meaning: string }[] = [
-  { label: "Status", meaning: "On = we are tracking this client. Off = tracking is paused." },
+  { label: "Tracking", meaning: "Tracking = we watch this client. Paused = archived / not tracking." },
   {
     label: "Health",
     meaning:
-      "Needs attention = act soon. Watch = keep an eye on it. Healthy = looking good. Paused = tracking is off.",
+      "Not started = no competitor check yet. Needs attention = act soon. Watch = keep an eye on it. Healthy = looking good. Paused = tracking is off.",
+  },
+  {
+    label: "Last checked",
+    meaning: "When we last ran a competitor check. Stale means it’s been more than about a week.",
   },
   {
     label: "Competitors",
     meaning: "How many competing brands we found. Click the number or arrow to see their names.",
   },
   {
-    label: "Missing & to-build",
-    meaning:
-      "Things competitors have that you don’t, plus items saved to build later. Click to see the full list.",
+    label: "Gaps",
+    meaning: "Missing features vs competitors, plus items saved to build later.",
   },
   {
     label: "Next step",
@@ -197,11 +205,12 @@ function rivalNote(c: PortfolioRow) {
   const gaps = c.gaps ?? 0;
   const alerts = c.alerts ?? 0;
   const wishlist = c.wishlist ?? 0;
+  if ((c.rivals ?? 0) === 0 || !c.last_intel_at) return "No competitor check yet";
   if (gaps > 0) return `${gaps} thing${gaps === 1 ? "" : "s"} competitors have that you don’t`;
   if (alerts > 0) return `${alerts} warning${alerts === 1 ? "" : "s"} to review`;
   if (wishlist > 0) return `${wishlist} item${wishlist === 1 ? "" : "s"} saved to build later`;
   if (c.rivals > 0) return "Looking even with competitors so far";
-  return "Check competitors to compare";
+  return "Ready for a competitor check";
 }
 
 function nextActionFor(c: PortfolioRow & { health: Health; uniqueFeatures: number }): {
@@ -209,7 +218,7 @@ function nextActionFor(c: PortfolioRow & { health: Health; uniqueFeatures: numbe
   href: string | null;
 } {
   if ((c.rivals ?? 0) === 0 || !c.last_intel_at) {
-    return { label: "Check competitors", href: `/clients/${c.id}` };
+    return { label: "Run competitor check", href: `/clients/${c.id}` };
   }
   if ((c.alerts ?? 0) > 0) {
     return {
@@ -226,7 +235,7 @@ function nextActionFor(c: PortfolioRow & { health: Health; uniqueFeatures: numbe
   if ((c.reports ?? 0) > 0) {
     return { label: "Open latest report", href: `/clients/${c.id}?tab=reports` };
   }
-  return { label: "Open client", href: `/clients/${c.id}` };
+  return { label: "Open workspace", href: `/clients/${c.id}` };
 }
 
 function formatLastScanned(iso?: string | null): { label: string; ms: number; isStale: boolean } {
@@ -410,7 +419,7 @@ function DashboardHelp() {
 
   return (
     <>
-      <div className="fixed bottom-5 right-4 z-[60] flex flex-col items-end gap-2 sm:bottom-6 sm:right-6">
+      <div className="fixed bottom-5 right-4 z-[60] flex flex-col items-end gap-2 safe-bottom sm:bottom-6 sm:right-6">
         {supportOpen ? (
           <div className="mb-1 flex max-h-[min(34rem,calc(100vh-6rem))] w-[min(22rem,calc(100vw-2rem))] flex-col overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--panel)] shadow-[0_16px_48px_rgba(20,35,31,0.18)]">
             <div className="flex shrink-0 items-start justify-between gap-3 border-b border-[var(--line)] bg-[var(--accent-soft)]/60 px-4 py-3">
@@ -610,6 +619,7 @@ export default function DashboardPage() {
   const [tipVisible, setTipVisible] = useState(false);
   const [expandedId, setExpandedId] = useState("");
   const [detailsById, setDetailsById] = useState<Record<string, RowDetails>>({});
+  const [pulseExpanded, setPulseExpanded] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
 
   async function loadRowDetails(clientId: string) {
@@ -877,7 +887,7 @@ export default function DashboardPage() {
         uniqueFeatures,
         threats: c.alerts ?? 0,
         note: rivalNote(c),
-        latest: latestByClient.get(c.id) || "No updates yet — check competitors",
+        latest: latestByClient.get(c.id) || (c.last_intel_at ? "Latest insight unavailable" : ""),
         nextAction: next.label,
         nextHref: next.href,
         lastScannedLabel: scanned.label,
@@ -935,10 +945,15 @@ export default function DashboardPage() {
   }
 
   function NextActionCell({ c }: { c: EnrichedRow }) {
+    const needsCheck = c.health === "Not started";
     return (
       <Link
         href={c.nextHref || `/clients/${c.id}`}
-        className="font-medium text-[var(--accent)] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] rounded"
+        className={`inline-flex items-center rounded-lg px-2.5 py-1.5 text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] ${
+          needsCheck
+            ? "!bg-[var(--accent)] !text-white hover:brightness-110"
+            : "!text-[var(--accent)] hover:bg-[var(--accent-soft)]/60"
+        }`}
       >
         {c.nextAction}
       </Link>
@@ -947,23 +962,34 @@ export default function DashboardPage() {
 
   function ActionButtons({ c, compact }: { c: EnrichedRow; compact?: boolean }) {
     const btn = compact ? "!px-2.5 !py-1.5 text-xs" : "!px-3 !py-2 text-xs";
+    const needsCheck = c.health === "Not started";
     return (
-      <div className="flex flex-wrap gap-1.5">
-        <Link href={`/clients/${c.id}`}>
-          <Button variant="ghost" className={btn} title="Open client">
-            Open
-          </Button>
-        </Link>
-        <Link href={`/clients/${c.id}?tab=reports`}>
-          <Button variant="ghost" className={btn} title="Reports">
-            <span className="inline-flex items-center gap-1">
-              <FileText size={12} /> Reports
-            </span>
-          </Button>
-        </Link>
+      <div className="flex flex-wrap items-center justify-end gap-1.5">
+        {needsCheck ? (
+          <Link href={`/clients/${c.id}`}>
+            <Button className={btn} title="Open client and run competitor check">
+              Check
+            </Button>
+          </Link>
+        ) : (
+          <Link href={`/clients/${c.id}`}>
+            <Button variant="ghost" className={btn} title="Open client">
+              Open
+            </Button>
+          </Link>
+        )}
+        {!needsCheck ? (
+          <Link href={`/clients/${c.id}?tab=reports`}>
+            <Button variant="ghost" className={btn} title="Reports">
+              <span className="inline-flex items-center gap-1">
+                <FileText size={12} /> Reports
+              </span>
+            </Button>
+          </Link>
+        ) : null}
         <Button
           variant="ghost"
-          className={`${btn} !border-red-200 !text-red-700 hover:!bg-red-50`}
+          className={`${btn} !border-transparent !text-[var(--muted)] hover:!border-red-200 hover:!bg-red-50 hover:!text-red-700`}
           title="Archive client"
           onClick={() => void archiveClient(c.id, c.name)}
         >
@@ -973,12 +999,24 @@ export default function DashboardPage() {
     );
   }
 
-  function rowClass(_c: EnrichedRow) {
-    return "border-b border-[var(--line)] last:border-0 align-middle transition-colors hover:bg-black/[0.015]";
+  function rowClass(c: EnrichedRow) {
+    const tint =
+      c.health === "Needs attention"
+        ? "bg-red-50/30"
+        : c.health === "Not started"
+          ? "bg-black/[0.012]"
+          : "";
+    return `border-b border-[var(--line)] last:border-0 align-middle transition-colors hover:bg-black/[0.02] ${tint}`;
   }
 
-  function mobileCardClass(_c: EnrichedRow) {
-    return "rounded-xl border border-[var(--line)] p-3 transition-colors";
+  function mobileCardClass(c: EnrichedRow) {
+    const tint =
+      c.health === "Needs attention"
+        ? "border-red-200/70 bg-red-50/20"
+        : c.health === "Not started"
+          ? "border-dashed bg-black/[0.01]"
+          : "";
+    return `rounded-xl border border-[var(--line)] p-3.5 transition-colors ${tint}`;
   }
 
   return (
@@ -1026,8 +1064,9 @@ export default function DashboardPage() {
             <Card className="bg-[var(--accent-soft)]/50 border-[var(--accent)]/20">
               <div className="flex items-start justify-between gap-3">
                 <p className="text-sm text-[var(--ink)]">
-                  <span className="font-semibold">Tip:</span> start with red or amber Health, then follow{" "}
-                  <span className="font-medium">Next step</span>. Open a client to run Check competitors. Press{" "}
+                  <span className="font-semibold">Tip:</span> start with red Health or{" "}
+                  <span className="font-medium">Not started</span> rows, then follow{" "}
+                  <span className="font-medium">Next</span>. Press{" "}
                   <kbd className="rounded border border-[var(--line)] bg-white px-1.5 py-0.5 text-xs">/</kbd> to search.
                 </p>
                 <button
@@ -1105,7 +1144,7 @@ export default function DashboardPage() {
                   </div>
 
                   <div className="mt-5 space-y-3">
-                    {visiblePortfolio.slice(0, 8).map((c) => {
+                    {(pulseExpanded ? visiblePortfolio : visiblePortfolio.slice(0, 8)).map((c) => {
                       const you = c.features ?? 0;
                       const gaps = c.gaps ?? 0;
                       const threats = c.threats;
@@ -1121,9 +1160,21 @@ export default function DashboardPage() {
                             >
                               {c.name}
                             </Link>
-                            <span className="text-xs text-[var(--muted)]">
-                              {c.rivals} competitor{c.rivals === 1 ? "" : "s"} found
-                            </span>
+                            <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--muted)]">
+                              <span>
+                                {c.rivals} competitor{c.rivals === 1 ? "" : "s"} found
+                              </span>
+                              <span
+                                className={
+                                  c.isStale
+                                    ? "rounded-md bg-amber-50 px-1.5 py-0.5 font-medium text-amber-800"
+                                    : ""
+                                }
+                                title="Last competitor check"
+                              >
+                                {c.isStale ? `Stale · ${c.lastScannedLabel}` : c.lastScannedLabel}
+                              </span>
+                            </div>
                           </div>
                           <div className="mt-2.5">
                             <RivalPulseBar features={you} gaps={gaps} threats={threats} />
@@ -1139,6 +1190,18 @@ export default function DashboardPage() {
                         </div>
                       );
                     })}
+                    {visiblePortfolio.length > 8 ? (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        className="w-full"
+                        onClick={() => setPulseExpanded((v) => !v)}
+                      >
+                        {pulseExpanded
+                          ? "Show fewer clients"
+                          : `Show all ${visiblePortfolio.length} clients`}
+                      </Button>
+                    ) : null}
                   </div>
                 </Card>
               ) : null}
@@ -1223,51 +1286,82 @@ export default function DashboardPage() {
                 <div className="space-y-3 md:hidden">
                   {visiblePortfolio.map((c) => {
                     const open = expandedId === c.id;
+                    const notStarted = c.health === "Not started";
                     return (
                       <div key={c.id} className={mobileCardClass(c)}>
                         <div className="flex items-start justify-between gap-2">
                           <Link href={`/clients/${c.id}`} className="min-w-0">
-                            <div className="font-medium truncate hover:text-[var(--accent)]">{c.name}</div>
-                            <div className="text-xs text-[var(--muted)] mt-0.5">{c.industry || "—"}</div>
+                            <div className="font-semibold truncate hover:text-[var(--accent)]">{c.name}</div>
+                            {c.industry ? (
+                              <div className="text-xs text-[var(--muted)] mt-0.5">{c.industry}</div>
+                            ) : null}
                           </Link>
-                          <span className={statusBadge(c.is_active)}>{c.is_active ? "On" : "Off"}</span>
-                        </div>
-                        <div className="mt-3 flex flex-wrap items-center gap-2">
-                          <span className={healthBadge(c.health)}>{c.health}</span>
-                          <span className="text-xs text-[var(--muted)]">
-                            <span className="font-medium tabular-nums text-[var(--ink)]">{c.rivals}</span> competitors
-                          </span>
-                          <span className="text-xs text-[var(--muted)]">
-                            <span className="font-medium tabular-nums text-[var(--ink)]">{c.uniqueFeatures}</span> missing
-                            / to-build
-                          </span>
-                        </div>
-                        <div className="mt-3 rounded-lg border border-[var(--line)] bg-black/[0.02] px-3 py-2.5">
-                          <p className="text-[10px] font-medium uppercase tracking-wide text-[var(--muted)]">
-                            What to do next
-                          </p>
-                          <div className="mt-1">
-                            <NextActionCell c={c} />
+                          <div className="flex shrink-0 flex-col items-end gap-1">
+                            <span className={statusBadge(c.is_active)}>
+                              {c.is_active ? "Tracking" : "Paused"}
+                            </span>
+                            <span className={healthBadge(c.health)}>{c.health}</span>
                           </div>
-                          <p className="mt-1 text-xs text-[var(--muted)]">{c.note}</p>
                         </div>
-                        <button
-                          type="button"
-                          onClick={() => toggleExpand(c.id)}
-                          aria-expanded={open}
-                          className="mt-3 inline-flex w-full items-center justify-between rounded-lg border border-[var(--line)] px-3 py-2 text-sm font-medium text-[var(--ink)] hover:bg-black/[0.02]"
-                        >
-                          <span>{open ? "Hide details" : "Show competitors & missing"}</span>
-                          {open ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
-                        </button>
-                        {open ? (
-                          <div className="mt-2 rounded-lg border border-[var(--line)] bg-white px-3 py-3">
-                            <DetailsPanels clientId={c.id} />
+
+                        <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+                          <div className="rounded-lg bg-black/[0.03] px-2 py-2">
+                            <div className="text-base font-semibold tabular-nums text-[var(--ink)]">
+                              {notStarted ? "—" : c.rivals}
+                            </div>
+                            <div className="text-[10px] uppercase tracking-wide text-[var(--muted)]">Rivals</div>
                           </div>
-                        ) : null}
-                        <div className="mt-3 border-t border-[var(--line)] pt-3">
+                          <div className="rounded-lg bg-black/[0.03] px-2 py-2">
+                            <div className="text-base font-semibold tabular-nums text-[var(--ink)]">
+                              {notStarted ? "—" : c.uniqueFeatures}
+                            </div>
+                            <div className="text-[10px] uppercase tracking-wide text-[var(--muted)]">Gaps</div>
+                          </div>
+                          <div className="rounded-lg bg-black/[0.03] px-2 py-2">
+                            <div
+                              className={`text-xs font-medium leading-tight ${
+                                c.isStale ? "text-amber-800" : "text-[var(--ink)]"
+                              }`}
+                            >
+                              {c.lastScannedLabel}
+                            </div>
+                            <div className="mt-0.5 text-[10px] uppercase tracking-wide text-[var(--muted)]">
+                              Checked
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                          <div className="min-w-0">
+                            <p className="text-[10px] font-medium uppercase tracking-wide text-[var(--muted)]">
+                              Next
+                            </p>
+                            <div className="mt-1">
+                              <NextActionCell c={c} />
+                            </div>
+                            <p className="mt-1 text-xs text-[var(--muted)]">{c.note}</p>
+                          </div>
                           <ActionButtons c={c} />
                         </div>
+
+                        {!notStarted ? (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => toggleExpand(c.id)}
+                              aria-expanded={open}
+                              className="mt-3 inline-flex w-full items-center justify-between rounded-lg border border-[var(--line)] px-3 py-2 text-sm font-medium text-[var(--ink)] hover:bg-black/[0.02]"
+                            >
+                              <span>{open ? "Hide details" : "Show competitors & missing"}</span>
+                              {open ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                            </button>
+                            {open ? (
+                              <div className="mt-2 rounded-lg border border-[var(--line)] bg-white px-3 py-3">
+                                <DetailsPanels clientId={c.id} />
+                              </div>
+                            ) : null}
+                          </>
+                        ) : null}
                       </div>
                     );
                   })}
@@ -1284,11 +1378,11 @@ export default function DashboardPage() {
 
                 <div className="hidden md:block">
                   <div className="overflow-x-auto rounded-xl border border-[var(--line)]">
-                    <table className="w-full min-w-[860px] border-collapse text-sm">
+                    <table className="w-full min-w-[680px] border-collapse text-sm">
                       <thead>
                         <tr className="border-b border-[var(--line)] bg-black/[0.03] text-left">
                           <th className="w-10 px-2 py-3" aria-label="Expand" />
-                          <th className="px-3 py-3 font-medium">
+                          <th className="px-3 py-3 font-medium text-[var(--ink)]">
                             <SortButton
                               label="Client"
                               active={sortKey === "name"}
@@ -1297,10 +1391,10 @@ export default function DashboardPage() {
                             />
                           </th>
                           <th
-                            className="px-3 py-3 text-center text-xs font-medium uppercase tracking-wide text-[var(--muted)]"
+                            className="px-3 py-3 text-center text-[11px] font-medium uppercase tracking-wide text-[var(--muted)]"
                             title={COLUMN_HELP[0].meaning}
                           >
-                            Status
+                            Tracking
                           </th>
                           <th className="px-3 py-3" title={COLUMN_HELP[1].meaning}>
                             <SortButton
@@ -1310,31 +1404,39 @@ export default function DashboardPage() {
                               onClick={() => toggleSort("health")}
                             />
                           </th>
-                          <th className="px-3 py-3 text-center" title={COLUMN_HELP[2].meaning}>
+                          <th
+                            className="hidden px-3 py-3 text-[11px] font-medium uppercase tracking-wide text-[var(--muted)] lg:table-cell"
+                            title={COLUMN_HELP[2].meaning}
+                          >
+                            Last checked
+                          </th>
+                          <th className="px-3 py-3 text-center" title={COLUMN_HELP[3].meaning}>
                             <div className="flex justify-center">
                               <SortButton
-                                label="Competitors"
+                                label="Rivals"
                                 active={sortKey === "rivals"}
                                 dir={sortDir}
                                 onClick={() => toggleSort("rivals")}
                               />
                             </div>
                           </th>
-                          <th className="px-3 py-3" title={COLUMN_HELP[3].meaning}>
-                            <SortButton
-                              label="Missing & to-build"
-                              active={sortKey === "uniqueFeatures"}
-                              dir={sortDir}
-                              onClick={() => toggleSort("uniqueFeatures")}
-                            />
+                          <th className="px-3 py-3 text-center" title={COLUMN_HELP[4].meaning}>
+                            <div className="flex justify-center">
+                              <SortButton
+                                label="Gaps"
+                                active={sortKey === "uniqueFeatures"}
+                                dir={sortDir}
+                                onClick={() => toggleSort("uniqueFeatures")}
+                              />
+                            </div>
                           </th>
                           <th
-                            className="px-3 py-3 text-xs font-medium uppercase tracking-wide text-[var(--muted)]"
-                            title={COLUMN_HELP[4].meaning}
+                            className="px-3 py-3 text-[11px] font-medium uppercase tracking-wide text-[var(--muted)]"
+                            title={COLUMN_HELP[5].meaning}
                           >
-                            Next step
+                            Next
                           </th>
-                          <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wide text-[var(--muted)]">
+                          <th className="px-3 py-3 text-right text-[11px] font-medium uppercase tracking-wide text-[var(--muted)]">
                             Actions
                           </th>
                         </tr>
@@ -1342,6 +1444,7 @@ export default function DashboardPage() {
                       <tbody>
                         {visiblePortfolio.map((c) => {
                           const open = expandedId === c.id;
+                          const notStarted = c.health === "Not started";
                           return (
                             <Fragment key={c.id}>
                               <tr className={rowClass(c)}>
@@ -1352,7 +1455,8 @@ export default function DashboardPage() {
                                     aria-expanded={open}
                                     aria-label={open ? `Hide details for ${c.name}` : `Show details for ${c.name}`}
                                     title={open ? "Hide details" : "Show competitors, missing & to-build"}
-                                    className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--line)] text-[var(--muted)] hover:bg-black/[0.03] hover:text-[var(--ink)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+                                    disabled={notStarted}
+                                    className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--line)] text-[var(--muted)] hover:bg-black/[0.03] hover:text-[var(--ink)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] disabled:cursor-default disabled:opacity-30"
                                   >
                                     {open ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
                                   </button>
@@ -1364,60 +1468,84 @@ export default function DashboardPage() {
                                   >
                                     {c.name}
                                   </Link>
-                                  <div className="mt-0.5 text-xs text-[var(--muted)]">{c.industry || "—"}</div>
-                                  <div className="mt-1 max-w-[16rem] text-xs text-[var(--muted)] line-clamp-1">
-                                    {c.latest}
-                                  </div>
+                                  {c.industry ? (
+                                    <div className="mt-0.5 text-xs text-[var(--muted)]">{c.industry}</div>
+                                  ) : null}
+                                  {c.latest ? (
+                                    <div className="mt-1 max-w-[14rem] text-xs text-[var(--muted)] line-clamp-1">
+                                      {c.latest}
+                                    </div>
+                                  ) : notStarted ? (
+                                    <div className="mt-1 text-xs text-[var(--muted)]">Waiting on first check</div>
+                                  ) : null}
                                 </td>
                                 <td className="px-3 py-3.5 text-center">
-                                  <span className={statusBadge(c.is_active)}>{c.is_active ? "On" : "Off"}</span>
+                                  <span className={statusBadge(c.is_active)}>
+                                    {c.is_active ? "Tracking" : "Paused"}
+                                  </span>
                                 </td>
                                 <td className="px-3 py-3.5">
                                   <span className={healthBadge(c.health)}>{c.health}</span>
                                 </td>
-                                <td className="px-3 py-3.5 text-center">
-                                  <button
-                                    type="button"
-                                    onClick={() => toggleExpand(c.id)}
-                                    className="group mx-auto block rounded-lg px-2 py-1 hover:bg-black/[0.03]"
-                                    title="Show competitor list"
+                                <td className="hidden px-3 py-3.5 lg:table-cell">
+                                  <span
+                                    className={`text-xs ${
+                                      c.isStale
+                                        ? "rounded-md bg-amber-50 px-1.5 py-0.5 font-medium text-amber-800"
+                                        : "text-[var(--muted)]"
+                                    }`}
+                                    title={c.last_intel_at || "Not checked yet"}
                                   >
-                                    <div className="text-base font-semibold tabular-nums text-[var(--ink)] group-hover:text-[var(--accent)]">
-                                      {c.rivals}
-                                    </div>
-                                    <div className="text-[10px] uppercase tracking-wide text-[var(--muted)]">found</div>
-                                  </button>
+                                    {c.isStale ? `Stale · ${c.lastScannedLabel}` : c.lastScannedLabel}
+                                  </span>
+                                </td>
+                                <td className="px-3 py-3.5 text-center">
+                                  {notStarted ? (
+                                    <span className="text-sm text-[var(--muted)]">—</span>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      onClick={() => toggleExpand(c.id)}
+                                      className="group mx-auto block rounded-lg px-2 py-1 hover:bg-black/[0.03]"
+                                      title="Show competitor list"
+                                    >
+                                      <div className="text-base font-semibold tabular-nums text-[var(--ink)] group-hover:text-[var(--accent)]">
+                                        {c.rivals}
+                                      </div>
+                                    </button>
+                                  )}
+                                </td>
+                                <td className="px-3 py-3.5 text-center">
+                                  {notStarted ? (
+                                    <span className="text-sm text-[var(--muted)]">—</span>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      onClick={() => toggleExpand(c.id)}
+                                      className="group mx-auto block rounded-lg px-2 py-1 hover:bg-black/[0.03]"
+                                      title="Show missing & to-build items"
+                                    >
+                                      <div className="text-base font-semibold tabular-nums text-[var(--ink)] group-hover:text-[var(--accent)]">
+                                        {c.uniqueFeatures}
+                                      </div>
+                                      {(c.gaps ?? 0) > 0 || (c.wishlist ?? 0) > 0 ? (
+                                        <div className="mt-0.5 text-[10px] text-[var(--muted)]">
+                                          {c.gaps ?? 0} miss · {c.wishlist ?? 0} build
+                                        </div>
+                                      ) : null}
+                                    </button>
+                                  )}
+                                </td>
+                                <td className="max-w-[12rem] px-3 py-3.5">
+                                  <NextActionCell c={c} />
                                 </td>
                                 <td className="px-3 py-3.5">
-                                  <button
-                                    type="button"
-                                    onClick={() => toggleExpand(c.id)}
-                                    className="group rounded-lg px-1 py-1 text-left hover:bg-black/[0.03]"
-                                    title="Show missing & to-build items"
-                                  >
-                                    <div className="text-base font-semibold tabular-nums text-[var(--ink)] group-hover:text-[var(--accent)]">
-                                      {c.uniqueFeatures}
-                                    </div>
-                                    <div className="mt-0.5 text-xs text-[var(--muted)]">
-                                      {(c.gaps ?? 0) > 0 || (c.wishlist ?? 0) > 0
-                                        ? `${c.gaps ?? 0} missing · ${c.wishlist ?? 0} to build`
-                                        : "Nothing missing yet"}
-                                    </div>
-                                  </button>
-                                </td>
-                                <td className="max-w-[14rem] px-3 py-3.5">
-                                  <NextActionCell c={c} />
-                                  <div className="mt-1 text-xs leading-snug text-[var(--muted)]">{c.note}</div>
-                                </td>
-                                <td className="px-4 py-3.5">
-                                  <div className="flex flex-wrap justify-end gap-1.5">
-                                    <ActionButtons c={c} compact />
-                                  </div>
+                                  <ActionButtons c={c} compact />
                                 </td>
                               </tr>
-                              {open ? (
+                              {open && !notStarted ? (
                                 <tr className="border-b border-[var(--line)] bg-black/[0.02]">
-                                  <td colSpan={8} className="px-4 py-4">
+                                  <td colSpan={9} className="px-4 py-4">
                                     <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                                       <p className="text-sm font-medium text-[var(--ink)]">
                                         Details for {c.name}
@@ -1458,6 +1586,8 @@ export default function DashboardPage() {
         <PortfolioSkeleton />
       )}
       <DashboardHelp />
+      {/* Space so fixed help FAB doesn’t cover the last table actions on small screens */}
+      <div className="h-20 sm:h-8" aria-hidden />
     </AppShell>
   );
 }

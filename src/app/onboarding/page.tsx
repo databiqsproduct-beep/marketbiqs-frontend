@@ -38,7 +38,7 @@ export default function OnboardingPage() {
   return (
     <div className="min-h-screen max-w-3xl mx-auto px-4 sm:px-6 py-8 sm:py-10">
       <PageHeader
-        title="Instant agency onboarding"
+        title={agency?.workspace_mode === "creator" ? "Set up your reports" : "Instant agency onboarding"}
         subtitle={`Welcome${agency ? `, ${agency.name}` : ""}. Brand your reports and add your first client in one pass.`}
       />
       <Card>
@@ -50,7 +50,11 @@ export default function OnboardingPage() {
             </div>
             <div>
               <Label>Report footer</Label>
-              <Input value={form.report_footer} onChange={(e) => setForm({ ...form, report_footer: e.target.value })} placeholder="Prepared by your agency" />
+              <Input
+                value={form.report_footer}
+                onChange={(e) => setForm({ ...form, report_footer: e.target.value })}
+                placeholder={agency?.workspace_mode === "creator" ? "Prepared for your reports" : "Prepared by your agency"}
+              />
             </div>
           </div>
           <div>

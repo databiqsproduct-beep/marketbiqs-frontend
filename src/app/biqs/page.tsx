@@ -1,9 +1,14 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { Button, Card, Label, PageHeader } from "@/components/ui";
 import { api } from "@/lib/api";
+
+function errMsg(err: unknown, fallback: string) {
+  return err instanceof Error ? err.message : fallback;
+}
 
 type BiqsStatus = "backlog" | "todo" | "in_progress" | "in_review" | "done";
 
@@ -66,16 +71,21 @@ export default function BiqsPage() {
         const fromQuery = new URLSearchParams(window.location.search).get("client");
         if (fromQuery && data.some((c) => c.id === fromQuery)) setClientId(fromQuery);
         else if (data[0]) setClientId(data[0].id);
+        else setClientId("");
       })
-      .catch((err) => setError(err.message));
+      .catch((err) => setError(errMsg(err, "Failed to load clients")));
   }, []);
 
   useEffect(() => {
-    if (!clientId) return;
+    if (!clientId) {
+      setTickets([]);
+      return;
+    }
     setLoading(true);
+    setError("");
     api<BiqsTicket[]>(`/api/clients/${clientId}/biqs-tickets`)
       .then(setTickets)
-      .catch((err) => setError(err.message))
+      .catch((err) => setError(errMsg(err, "Failed to load Biqs board")))
       .finally(() => setLoading(false));
   }, [clientId]);
 
@@ -97,6 +107,7 @@ export default function BiqsPage() {
   }, [tickets]);
 
   async function moveTicket(ticketId: string, status: BiqsStatus) {
+    if (!clientId) return;
     const ticket = tickets.find((t) => t.id === ticketId);
     if (!ticket || ticket.status === status) return;
 
@@ -130,25 +141,35 @@ export default function BiqsPage() {
       />
       {error ? <p className="mb-4 text-red-600">{error}</p> : null}
 
-      <Card className="mb-4 max-w-md">
-        <Label>Client workspace</Label>
-        <select
-          className="w-full rounded-xl border border-[var(--line)] bg-white px-3 py-2.5 text-sm"
-          value={clientId}
-          onChange={(e) => setClientId(e.target.value)}
-        >
-          {clients.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
-            </option>
-          ))}
-        </select>
-        {!clients.length ? (
-          <p className="mt-3 text-sm text-[var(--muted)]">No clients yet. Add a brand first.</p>
-        ) : null}
-      </Card>
+      {!clients.length ? (
+        <Card className="max-w-md py-8 text-center">
+          <h2 className="font-semibold">No clients yet</h2>
+          <p className="mx-auto mt-2 max-w-md text-sm text-[var(--muted)]">
+            Add a brand first, then push wishlist tickets to Biqs from the client page.
+          </p>
+          <Link href="/clients" className="mt-4 inline-flex">
+            <Button>Go to clients</Button>
+          </Link>
+        </Card>
+      ) : (
+        <Card className="mb-4 max-w-md">
+          <Label>Client workspace</Label>
+          <select
+            className="w-full rounded-xl border border-[var(--line)] bg-white px-3 py-2.5 text-sm"
+            value={clientId}
+            onChange={(e) => setClientId(e.target.value)}
+            disabled={loading}
+          >
+            {clients.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+        </Card>
+      )}
 
-      {loading ? (
+      {!clients.length ? null : loading ? (
         <div className="animate-pulse text-sm text-[var(--muted)]">Loading board...</div>
       ) : tickets.length === 0 ? (
         <Card>
@@ -156,6 +177,11 @@ export default function BiqsPage() {
             No tickets on this board yet. Open the client → Wishlist → build a plan →{" "}
             <strong className="font-medium text-[var(--ink)]">Add tickets to Biqs</strong>.
           </p>
+          {clientId ? (
+            <Link href={`/clients/${clientId}`} className="mt-3 inline-flex">
+              <Button variant="ghost">Open client</Button>
+            </Link>
+          ) : null}
         </Card>
       ) : (
         <div className="-mx-4 overflow-x-auto px-4 pb-3 sm:mx-0 sm:px-0">

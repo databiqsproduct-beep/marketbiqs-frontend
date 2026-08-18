@@ -1,15 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, ReactNode, useEffect, useMemo, useRef, useState } from "react";
-import { useParams, useSearchParams } from "next/navigation";
+import { FormEvent, ReactNode, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { ChevronDown } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { FeatureStanceChart } from "@/components/Charts";
 import { IntelProgressOverlay, IntelRunPhase, useIntelProgress } from "@/components/IntelProgress";
 import { IntelSetupDialog, IntelSetupOptions } from "@/components/IntelSetupDialog";
+import { ReportCard } from "@/components/ReportCard";
 import { Button, Card, Input, Label, PageHeader, Textarea } from "@/components/ui";
-import { api, downloadReportPdf, runClientIntel } from "@/lib/api";
+import { api, runClientIntel } from "@/lib/api";
 
 type RadarSectionId = "trends" | "sentiment" | "snapshots" | "jobs";
 
@@ -19,6 +20,10 @@ function externalHref(url?: string | null): string | undefined {
   if (/^https?:\/\//i.test(raw)) return raw;
   if (raw.startsWith("//")) return `https:${raw}`;
   return `https://${raw}`;
+}
+
+function buildListItemKey(name: string) {
+  return name.trim().toLowerCase().slice(0, 120);
 }
 
 function RadarCollapsible({
@@ -69,14 +74,12 @@ function RadarCollapsible({
   );
 }
 
-type Tab = "loop" | "features" | "competitors" | "compare" | "gaps" | "alerts" | "wishlist" | "reports" | "radar";
+type Tab = "loop" | "features" | "competitors" | "alerts" | "wishlist" | "reports" | "radar";
 
 const VALID_TABS: Tab[] = [
   "loop",
   "features",
   "competitors",
-  "compare",
-  "gaps",
   "alerts",
   "wishlist",
   "reports",
@@ -84,13 +87,9 @@ const VALID_TABS: Tab[] = [
 ];
 
 const TAB_HELP: Record<Tab, string> = {
-  loop: "Start here each week: see what competitors offer that this brand doesn’t, pick what matters, and plan the next moves in plain English.",
-  features: "Everything this brand already offers today. To track something new to build, save it from This week’s plan, Competitors, or Warnings.",
+  loop: "Weekly check-in: see status at a glance, jump to Competitors or Warnings, then write a short client summary.",
+  features: "Everything this brand already offers today. To track something new to build, save it from Competitors or Warnings.",
   competitors:
-    "Add or pick a rival, then see the scoreboard and a feature-by-feature comparison for that company.",
-  compare:
-    "Add or pick a rival, then see the scoreboard and a feature-by-feature comparison for that company.",
-  gaps:
     "Add or pick a rival, then see the scoreboard and a feature-by-feature comparison for that company.",
   alerts: "Things competitors offer that this brand still doesn’t. Clear these as you act on them.",
   wishlist: "Ideas you saved to build later. Turn any item into a simple step-by-step plan (and send to Jira if connected).",
@@ -100,9 +99,9 @@ const TAB_HELP: Record<Tab, string> = {
 };
 
 const DEFAULT_NEXT_ACTIONS = [
-  "Read the suggestions below — what rivals offer that this brand still lacks",
-  "Save the important ones to the build list so the team can act on them",
-  "Open a simple build plan (and send tasks to Jira if you use it)",
+  "Open Competitors — pick a rival and review the feature-by-feature comparison",
+  "Open Warnings — save important gaps to the build list, or mark done when handled",
+  "Open Build list — turn saved items into a simple step-by-step plan",
   "Write a short weekly summary you can share with the client",
 ];
 
@@ -167,11 +166,25 @@ function tabFromQuery(raw: string | null): Tab {
   return "loop";
 }
 
-export default function ClientDetailPage() {
+function ClientDetailPageInner() {
   const params = useParams<{ id: string }>();
   const searchParams = useSearchParams();
+  const router = useRouter();
   const clientId = params.id;
-  const [tab, setTab] = useState<Tab>(() => tabFromQuery(searchParams.get("tab")));
+  const [tab, setTabState] = useState<Tab>(() => tabFromQuery(searchParams.get("tab")));
+
+  const setTab = useCallback(
+    (next: Tab) => {
+      const resolved = tabFromQuery(next);
+      setTabState(resolved);
+      const params = new URLSearchParams(searchParams.toString());
+      if (resolved === "loop") params.delete("tab");
+      else params.set("tab", resolved);
+      const qs = params.toString();
+      router.replace(qs ? `/clients/${clientId}?${qs}` : `/clients/${clientId}`, { scroll: false });
+    },
+    [clientId, router, searchParams],
+  );
   const [client, setClient] = useState<any>(null);
   const [competitors, setCompetitors] = useState<any[]>([]);
   const [features, setFeatures] = useState<any[]>([]);
@@ -191,6 +204,7 @@ export default function ClientDetailPage() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState("");
+  const [wishlistJustSaved, setWishlistJustSaved] = useState<Record<string, true>>({});
   const [setupOpen, setSetupOpen] = useState(false);
   const [intelOpen, setIntelOpen] = useState(false);
   const [intelPhase, setIntelPhase] = useState<IntelRunPhase>("running");
@@ -212,7 +226,7 @@ export default function ClientDetailPage() {
   }
 
   useEffect(() => {
-    setTab(tabFromQuery(searchParams.get("tab")));
+    setTabState(tabFromQuery(searchParams.get("tab")));
   }, [searchParams]);
 
   useEffect(() => {
@@ -263,7 +277,7 @@ export default function ClientDetailPage() {
     api<any[]>(`/api/clients/${clientId}/comparisons?competitor_id=${selectedCompetitorId}`)
       .then(setComparisons)
       .catch(() => setComparisons([]));
-    if (tab === "competitors" || tab === "compare") {
+    if (tab === "competitors") {
       api<any>(`/api/clients/${clientId}/competitors/${selectedCompetitorId}`)
         .then(setCompetitorDetail)
         .catch(() => setCompetitorDetail(null));
@@ -290,6 +304,28 @@ export default function ClientDetailPage() {
     () => features.filter((f) => !f.is_wishlisted && !f.is_loved),
     [features],
   );
+
+  const wishlistKeys = useMemo(() => {
+    const keys = new Set<string>();
+    for (const f of wishlist) {
+      const key = buildListItemKey(String(f.name || ""));
+      if (key) keys.add(key);
+    }
+    return keys;
+  }, [wishlist]);
+
+  function buildListButton(featureName: string) {
+    const key = buildListItemKey(featureName);
+    const saving = busy === `wish-${key}`;
+    const saved = (!!key && wishlistKeys.has(key)) || !!wishlistJustSaved[key];
+    if (saving) {
+      return { key, label: "Saving to build list…", disabled: true as const };
+    }
+    if (saved) {
+      return { key, label: "Saved to build list", disabled: true as const };
+    }
+    return { key, label: "Save to build list", disabled: !!busy };
+  }
 
   const activeAlerts = useMemo(
     () => alerts.filter((a) => !a.acted_on && !a.acted_at && !a.is_acted && a.status !== "acted"),
@@ -442,6 +478,23 @@ export default function ClientDetailPage() {
     }
   }
 
+  async function restoreClient() {
+    setBusy("restore");
+    setError("");
+    try {
+      const updated = await api<any>(`/api/clients/${clientId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ is_active: true }),
+      });
+      setClient(updated);
+      setMessage(`“${updated.name || client?.name}” restored`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not restore client");
+    } finally {
+      setBusy("");
+    }
+  }
+
   async function sendFeedback(entity_type: "comparison" | "gap" | "alert", entity_id: string, rating: "useful" | "useless") {
     setBusy(`fb-${entity_id}-${rating}`);
     setError("");
@@ -473,12 +526,23 @@ export default function ClientDetailPage() {
   }
 
   async function addWishlist(payload: { feature_name: string; category?: string; description?: string }) {
-    setBusy("wish");
+    const key = buildListItemKey(payload.feature_name);
+    if (!key) {
+      setError("Enter a feature name before saving to the build list.");
+      return;
+    }
+    if (wishlistKeys.has(key) || wishlistJustSaved[key]) {
+      setMessage(`“${payload.feature_name.trim()}” is already on the build list`);
+      return;
+    }
+    setBusy(`wish-${key}`);
+    setError("");
     try {
       const f = await api<any>(`/api/clients/${clientId}/wishlist`, {
         method: "POST",
         body: JSON.stringify(payload),
       });
+      setWishlistJustSaved((prev) => ({ ...prev, [key]: true }));
       setMessage(`Saved “${f.name}” to the build list`);
       setSelectedFeatureId(f.id);
       await loadAll();
@@ -642,13 +706,7 @@ export default function ClientDetailPage() {
     { id: "radar", label: "What’s trending" },
   ];
 
-  const loopRecs = weekly?.recommendations || [];
-  const missingCount = loopRecs.filter((r: any) => r.type === "missing").length;
-  const improveCount = loopRecs.filter((r: any) => r.type !== "missing").length;
-  const nextActions =
-    Array.isArray(weekly?.next_actions) && weekly.next_actions.length
-      ? weekly.next_actions
-      : DEFAULT_NEXT_ACTIONS;
+  const nextActions = DEFAULT_NEXT_ACTIONS;
 
   return (
     <AppShell>
@@ -676,111 +734,161 @@ export default function ClientDetailPage() {
         title={client.name}
         subtitle={`${client.industry || "Industry not set yet"} · ${competitors.length} competitors watched · checks can run daily, or whenever you click the button`}
         actions={
-          <div className="flex flex-wrap gap-2">
-            <Link href="/clients">
-              <Button variant="ghost">All clients</Button>
+          <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap">
+            <Link href="/clients" className="col-span-1">
+              <Button variant="ghost" className="w-full sm:w-auto">
+                All clients
+              </Button>
             </Link>
-            <Link href={`/portal/${clientId}`}>
-              <Button variant="ghost">Client chat portal</Button>
+            <Link href={`/portal/${clientId}`} className="col-span-1">
+              <Button variant="ghost" className="w-full sm:w-auto">
+                Portal
+              </Button>
             </Link>
+            {client.is_active === false ? (
+              <Button
+                className="col-span-1 w-full sm:w-auto"
+                disabled={!!busy}
+                onClick={() => void restoreClient()}
+              >
+                {busy === "restore" ? "Restoring…" : "Restore"}
+              </Button>
+            ) : (
+              <Button
+                variant="ghost"
+                className="col-span-1 w-full !border-red-200 !text-red-700 hover:!bg-red-50 sm:w-auto"
+                disabled={!!busy}
+                onClick={() => void archiveClient()}
+              >
+                {busy === "archive" ? "Archiving…" : "Archive"}
+              </Button>
+            )}
             <Button
-              variant="ghost"
-              className="!border-red-200 !text-red-700 hover:!bg-red-50"
-              disabled={!!busy}
-              onClick={() => void archiveClient()}
+              className="col-span-1 w-full sm:w-auto"
+              onClick={runIntel}
+              disabled={!!busy || client.is_active === false}
             >
-              {busy === "archive" ? "Archiving…" : "Archive"}
-            </Button>
-            <Button onClick={runIntel} disabled={!!busy}>
               {busy === "pack" ? "Working…" : "Check competitors"}
             </Button>
           </div>
         }
       />
+      {client.is_active === false ? (
+        <Card className="mb-4 border-amber-200 bg-amber-50/50">
+          <p className="text-sm text-amber-950">
+            This client is archived — tracking is paused. Restore it to run competitor checks again. Reports stay
+            available below.
+          </p>
+        </Card>
+      ) : null}
       {error ? <p className="text-red-600 mb-4">{error}</p> : null}
       {message ? <p className="text-[var(--accent)] mb-4">{message}</p> : null}
 
-      <div className="flex gap-2 overflow-x-auto pb-2 mb-3 -mx-4 px-4 sm:mx-0 sm:px-0 tabs-scroll">
-        {tabs.map((t) => (
-          <button
-            key={t.id}
-            type="button"
-            onClick={() => setTab(t.id)}
-            title={TAB_HELP[t.id]}
-            className={`shrink-0 rounded-xl px-3 py-2 text-sm border touch-manipulation ${
-              tab === t.id
-                ? "bg-[var(--accent)] text-white border-[var(--accent)]"
-                : "border-[var(--line)] text-[var(--muted)] hover:bg-black/5"
-            }`}
-          >
-            {t.label}
-            {typeof t.count === "number" ? ` (${t.count})` : ""}
-          </button>
-        ))}
+      <div className="sticky top-0 z-10 -mx-4 mb-3 bg-[color-mix(in_srgb,var(--bg)_92%,transparent)] px-4 py-2 backdrop-blur-sm sm:static sm:z-auto sm:mx-0 sm:bg-transparent sm:px-0 sm:py-0 sm:backdrop-blur-none">
+        <div className="flex gap-2 overflow-x-auto pb-1 tabs-scroll" role="tablist" aria-label="Client sections">
+          {tabs.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              role="tab"
+              aria-selected={tab === t.id}
+              onClick={() => setTab(t.id)}
+              title={TAB_HELP[t.id]}
+              className={`shrink-0 rounded-xl px-3 py-2 text-sm border touch-manipulation ${
+                tab === t.id
+                  ? "bg-[var(--accent)] text-white border-[var(--accent)]"
+                  : "border-[var(--line)] text-[var(--muted)] hover:bg-black/5"
+              }`}
+            >
+              {t.label}
+              {typeof t.count === "number" ? ` (${t.count})` : ""}
+            </button>
+          ))}
+        </div>
       </div>
       <p className="text-sm text-[var(--muted)] mb-6 max-w-3xl leading-relaxed">{TAB_HELP[tab]}</p>
 
-      <div className="space-y-4 max-w-4xl">
+      <div className="space-y-4 max-w-4xl w-full">
         {tab === "loop" ? (
           <>
             <Card>
               <h2 className="font-semibold text-lg">What this page is for</h2>
               <p className="mt-2 text-sm leading-relaxed text-[var(--muted)]">
-                Think of this as a weekly check-in for {client.name}. We look at what competitors offer, highlight
-                what this brand is missing or can improve, and help you decide what to build or talk about next —
-                without needing deep tech jargon.
+                Think of this as a weekly check-in for {client.name}. Use Competitors for detail, Warnings for gaps to
+                act on, and Build list for what the team will ship next — without repeating the same ideas in three places.
               </p>
               <div className="mt-4 grid gap-3 sm:grid-cols-3">
-                <div className="rounded-xl border border-[var(--line)] bg-[var(--bg)]/60 px-3 py-3">
+                <button
+                  type="button"
+                  onClick={() => setTab("competitors")}
+                  className="rounded-xl border border-[var(--line)] bg-[var(--bg)]/60 px-3 py-3 text-left transition hover:border-[var(--accent)] hover:bg-[var(--accent-soft)]/40"
+                >
                   <div className="text-xs uppercase tracking-wide text-[var(--muted)]">Step 1</div>
-                  <div className="mt-1 text-sm font-medium text-[var(--ink)]">Read the suggestions</div>
+                  <div className="mt-1 text-sm font-medium text-[var(--ink)]">Review competitors</div>
                   <p className="mt-1 text-xs leading-relaxed text-[var(--muted)]">
-                    Each card is one idea: something a rival has, or something this brand already has but could make better.
+                    Compare feature-by-feature with each rival and see where {client.name} is ahead or behind.
                   </p>
-                </div>
-                <div className="rounded-xl border border-[var(--line)] bg-[var(--bg)]/60 px-3 py-3">
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTab("alerts")}
+                  className="rounded-xl border border-[var(--line)] bg-[var(--bg)]/60 px-3 py-3 text-left transition hover:border-[var(--accent)] hover:bg-[var(--accent-soft)]/40"
+                >
                   <div className="text-xs uppercase tracking-wide text-[var(--muted)]">Step 2</div>
-                  <div className="mt-1 text-sm font-medium text-[var(--ink)]">Save what matters</div>
+                  <div className="mt-1 text-sm font-medium text-[var(--ink)]">Clear warnings</div>
                   <p className="mt-1 text-xs leading-relaxed text-[var(--muted)]">
-                    Hit “Save to build list” on the ideas worth acting on. They’ll wait for you under Build list.
+                    Save important gaps to the build list, or mark done once you’ve handled them.
                   </p>
-                </div>
-                <div className="rounded-xl border border-[var(--line)] bg-[var(--bg)]/60 px-3 py-3">
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTab("wishlist")}
+                  className="rounded-xl border border-[var(--line)] bg-[var(--bg)]/60 px-3 py-3 text-left transition hover:border-[var(--accent)] hover:bg-[var(--accent-soft)]/40"
+                >
                   <div className="text-xs uppercase tracking-wide text-[var(--muted)]">Step 3</div>
-                  <div className="mt-1 text-sm font-medium text-[var(--ink)]">Share a short update</div>
+                  <div className="mt-1 text-sm font-medium text-[var(--ink)]">Ship from build list</div>
                   <p className="mt-1 text-xs leading-relaxed text-[var(--muted)]">
-                    Write a weekly summary for the client, or open Build list to turn an idea into simple next steps.
+                    Turn saved items into simple next steps — and write a short weekly summary for the client.
                   </p>
-                </div>
+                </button>
               </div>
             </Card>
 
             <Card>
               <h2 className="font-semibold mb-3">At a glance</h2>
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                <div className="rounded-xl border border-[var(--line)] px-3 py-3">
+                <button
+                  type="button"
+                  onClick={() => setTab("competitors")}
+                  className="rounded-xl border border-[var(--line)] px-3 py-3 text-left transition hover:border-[var(--accent)]"
+                >
                   <div className="text-2xl font-semibold text-[var(--ink)]">{competitors.length}</div>
                   <div className="mt-0.5 text-xs text-[var(--muted)]">Competitors watched</div>
-                </div>
-                <div className="rounded-xl border border-[var(--line)] px-3 py-3">
-                  <div className="text-2xl font-semibold text-[var(--ink)]">{loopRecs.length}</div>
-                  <div className="mt-0.5 text-xs text-[var(--muted)]">
-                    Ideas this week
-                    {loopRecs.length ? (
-                      <span className="block mt-0.5">
-                        {missingCount} missing · {improveCount} to improve
-                      </span>
-                    ) : null}
-                  </div>
-                </div>
-                <div className="rounded-xl border border-[var(--line)] px-3 py-3">
-                  <div className="text-2xl font-semibold text-[var(--ink)]">{wishlist.length}</div>
-                  <div className="mt-0.5 text-xs text-[var(--muted)]">Saved on build list</div>
-                </div>
-                <div className="rounded-xl border border-[var(--line)] px-3 py-3">
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTab("alerts")}
+                  className="rounded-xl border border-[var(--line)] px-3 py-3 text-left transition hover:border-[var(--accent)]"
+                >
                   <div className="text-2xl font-semibold text-[var(--ink)]">{activeAlerts.length}</div>
                   <div className="mt-0.5 text-xs text-[var(--muted)]">Open warnings</div>
-                </div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTab("wishlist")}
+                  className="rounded-xl border border-[var(--line)] px-3 py-3 text-left transition hover:border-[var(--accent)]"
+                >
+                  <div className="text-2xl font-semibold text-[var(--ink)]">{wishlist.length}</div>
+                  <div className="mt-0.5 text-xs text-[var(--muted)]">Saved on build list</div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTab("reports")}
+                  className="rounded-xl border border-[var(--line)] px-3 py-3 text-left transition hover:border-[var(--accent)]"
+                >
+                  <div className="text-2xl font-semibold text-[var(--ink)]">{reports.length}</div>
+                  <div className="mt-0.5 text-xs text-[var(--muted)]">Reports</div>
+                </button>
               </div>
               {weekly?.latest_report ? (
                 <p className="mt-3 text-sm text-[var(--muted)]">
@@ -823,102 +931,28 @@ export default function ClientDetailPage() {
                   </li>
                 ))}
               </ol>
+              <div className="mt-4 flex flex-wrap gap-2">
+                <Button variant="ghost" onClick={() => setTab("competitors")}>
+                  Open Competitors
+                </Button>
+                <Button variant="ghost" onClick={() => setTab("alerts")}>
+                  Open Warnings{activeAlerts.length ? ` (${activeAlerts.length})` : ""}
+                </Button>
+                <Button variant="ghost" onClick={() => setTab("wishlist")}>
+                  Open Build list{wishlist.length ? ` (${wishlist.length})` : ""}
+                </Button>
+              </div>
               <p className="mt-4 text-xs leading-relaxed text-[var(--muted)]">
                 “Write weekly summary” creates a short client-ready note from the latest findings and saves it under Reports.
               </p>
             </Card>
 
-            <div className="pt-1">
-              <h2 className="font-semibold">Ideas to review</h2>
-              <p className="mt-1 text-sm text-[var(--muted)] max-w-2xl leading-relaxed">
-                Each card is one opportunity. Pink labels mean a competitor has it and this brand doesn’t. Amber labels
-                mean this brand already has something similar but a rival does it better.
-              </p>
-            </div>
-
-            {loopRecs.map((rec: any) => {
-              const isMissing = rec.type === "missing";
-              return (
-                <Card key={`${rec.type}-${rec.feature_name}-${rec.competitor_id}`}>
-                  <div
-                    className={`text-xs font-medium uppercase tracking-wide ${
-                      isMissing ? "text-rose-600" : "text-amber-700"
-                    }`}
-                  >
-                    {isMissing ? "They have it · you don’t yet" : "You have it · make it stronger"}
-                  </div>
-                  <div className="font-semibold mt-1.5 text-lg">{rec.feature_name}</div>
-                  <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-[var(--muted)]">
-                    <span>
-                      Compared with <strong className="font-medium text-[var(--ink)]">{rec.competitor_name}</strong>
-                    </span>
-                    <span aria-hidden>·</span>
-                    <span>{confidenceLabel(rec.confidence_score)}</span>
-                    {rec.category ? (
-                      <>
-                        <span aria-hidden>·</span>
-                        <span>{rec.category}</span>
-                      </>
-                    ) : null}
-                  </div>
-
-                  {rec.recommendation ? (
-                    <div className="mt-4">
-                      <div className="text-xs font-medium uppercase tracking-wide text-[var(--muted)]">What this means</div>
-                      <p className="mt-1.5 text-sm leading-relaxed text-[var(--ink)]">{rec.recommendation}</p>
-                    </div>
-                  ) : null}
-
-                  {rec.why ? (
-                    <div className="mt-3 rounded-xl border border-[var(--line)] bg-[var(--bg)]/50 px-3 py-2.5">
-                      <div className="text-xs font-medium uppercase tracking-wide text-[var(--muted)]">
-                        Why the competitor is ahead
-                      </div>
-                      <p className="mt-1.5 text-sm leading-relaxed text-[var(--muted)]">{rec.why}</p>
-                    </div>
-                  ) : null}
-
-                  <div className="mt-4 flex flex-wrap items-center gap-2">
-                    <Button
-                      disabled={!!busy}
-                      onClick={() =>
-                        addWishlist({
-                          feature_name: rec.feature_name,
-                          category: rec.category || "General",
-                          description: rec.recommendation,
-                        })
-                      }
-                    >
-                      {busy === "wish" ? "Saving…" : "Save to build list"}
-                    </Button>
-                    <Button variant="ghost" onClick={() => setTab("wishlist")}>
-                      Open build list
-                    </Button>
-                    {rec.competitor_id ? (
-                      <Button
-                        variant="ghost"
-                        onClick={() => {
-                          setSelectedCompetitorId(rec.competitor_id);
-                          setTab("competitors");
-                        }}
-                      >
-                        Compare with {rec.competitor_name}
-                      </Button>
-                    ) : null}
-                  </div>
-                  <p className="mt-3 text-xs text-[var(--muted)]">
-                    Saving adds this idea to Build list so your team can turn it into concrete next steps later.
-                  </p>
-                </Card>
-              );
-            })}
-
-            {loopRecs.length === 0 ? (
+            {!competitors.length && !activeAlerts.length ? (
               <Card>
-                <h2 className="font-semibold">No ideas yet</h2>
+                <h2 className="font-semibold">Nothing to review yet</h2>
                 <p className="mt-2 text-sm leading-relaxed text-[var(--muted)] mb-4">
-                  Run a competitor check first. We’ll find what rivals offer, what’s missing for {client.name}, and
-                  suggest clear next moves you can save to the build list.
+                  Run a competitor check first. We’ll find rivals for {client.name}, compare what they offer, and open
+                  warnings you can clear from the Warnings tab.
                 </p>
                 <Button onClick={runIntel} disabled={!!busy}>
                   {busy === "pack" ? "Working…" : "Check competitors"}
@@ -998,7 +1032,7 @@ export default function ClientDetailPage() {
           </>
         ) : null}
 
-        {tab === "competitors" || tab === "compare" ? (
+        {tab === "competitors" ? (
           <>
             <Card>
               <h2 className="font-semibold mb-1">Add a competitor manually</h2>
@@ -1152,17 +1186,23 @@ export default function ClientDetailPage() {
                       </div>
                     ) : null}
                     <div className="flex flex-wrap gap-2 mt-3">
-                      <Button
-                        onClick={() =>
-                          addWishlist({
-                            feature_name: row.feature_name,
-                            category: row.category || "General",
-                            description: row.how_to_improve || row.note,
-                          })
-                        }
-                      >
-                        Save to build list
-                      </Button>
+                      {(() => {
+                        const bl = buildListButton(row.feature_name);
+                        return (
+                          <Button
+                            disabled={bl.disabled}
+                            onClick={() =>
+                              addWishlist({
+                                feature_name: row.feature_name,
+                                category: row.category || "General",
+                                description: row.how_to_improve || row.note,
+                              })
+                            }
+                          >
+                            {bl.label}
+                          </Button>
+                        );
+                      })()}
                       <Button
                         variant="ghost"
                         disabled={!!busy}
@@ -1228,19 +1268,25 @@ export default function ClientDetailPage() {
                         <div className="font-medium">{f.name}</div>
                         <div className="text-xs text-[var(--muted)]">{f.category || f.status || "Feature"}</div>
                         <p className="text-sm text-[var(--muted)] mt-1 leading-relaxed">{f.description || "—"}</p>
-                        <Button
-                          className="mt-2"
-                          variant="ghost"
-                          onClick={() =>
-                            addWishlist({
-                              feature_name: f.name,
-                              category: f.category || "General",
-                              description: f.description || "",
-                            })
-                          }
-                        >
-                          Save to build list
-                        </Button>
+                        {(() => {
+                          const bl = buildListButton(f.name);
+                          return (
+                            <Button
+                              className="mt-2"
+                              variant="ghost"
+                              disabled={bl.disabled}
+                              onClick={() =>
+                                addWishlist({
+                                  feature_name: f.name,
+                                  category: f.category || "General",
+                                  description: f.description || "",
+                                })
+                              }
+                            >
+                              {bl.label}
+                            </Button>
+                          );
+                        })()}
                       </div>
                     ))}
                     {!(competitorDetail?.features || []).length ? (
@@ -1292,16 +1338,23 @@ export default function ClientDetailPage() {
                   </div>
                 ) : null}
                 <div className="flex flex-wrap gap-2 mt-3">
-                  <Button
-                    onClick={() =>
-                      addWishlist({
-                        feature_name: alert.title.slice(0, 80),
-                        description: alert.action,
-                      })
-                    }
-                  >
-                    Save to build list
-                  </Button>
+                  {(() => {
+                    const featureName = alert.title.slice(0, 80);
+                    const bl = buildListButton(featureName);
+                    return (
+                      <Button
+                        disabled={bl.disabled}
+                        onClick={() =>
+                          addWishlist({
+                            feature_name: featureName,
+                            description: alert.action,
+                          })
+                        }
+                      >
+                        {bl.label}
+                      </Button>
+                    );
+                  })()}
                   <Button variant="ghost" disabled={!!busy} onClick={() => markAlertDone(alert.id)}>
                     {busy === `alert-${alert.id}` ? "Updating..." : "Mark done"}
                   </Button>
@@ -1337,17 +1390,23 @@ export default function ClientDetailPage() {
                 board, and optionally send those steps to Jira if it’s connected.
               </p>
               <Label>Pick an item</Label>
-              <select
-                className="mt-1 w-full rounded-xl border border-[var(--line)] bg-white px-3 py-2.5 text-sm"
-                value={selectedFeatureId}
-                onChange={(e) => setSelectedFeatureId(e.target.value)}
-              >
-                {wishlist.map((f) => (
-                  <option key={f.id} value={f.id}>
-                    {f.name}
-                  </option>
-                ))}
-              </select>
+              {wishlist.length ? (
+                <select
+                  className="mt-1 w-full rounded-xl border border-[var(--line)] bg-white px-3 py-2.5 text-sm"
+                  value={selectedFeatureId}
+                  onChange={(e) => setSelectedFeatureId(e.target.value)}
+                >
+                  {wishlist.map((f) => (
+                    <option key={f.id} value={f.id}>
+                      {f.name}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <p className="mt-1 text-sm text-[var(--muted)]">
+                  Nothing saved yet — add ideas from This week’s plan, Competitors, or Warnings.
+                </p>
+              )}
               <div className="flex flex-wrap gap-2 mt-4">
                 <Button onClick={() => selectedFeatureId && openPlan(selectedFeatureId)} disabled={!selectedFeatureId || !!busy}>
                   {busy === "plan" ? "Building plan…" : "Show step-by-step plan"}
@@ -1383,14 +1442,20 @@ export default function ClientDetailPage() {
                 <div className="mt-1 flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
                   <h3 className="font-semibold break-words min-w-0">{t.heading}</h3>
                   {t.jira_key ? (
-                    <a
-                      className="text-sm text-[var(--accent)] shrink-0"
-                      href={t.jira_url || "#"}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      {t.jira_key}
-                    </a>
+                    t.jira_url ? (
+                      <a
+                        className="text-sm text-[var(--accent)] shrink-0 hover:underline"
+                        href={externalHref(t.jira_url)}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        {t.jira_key}
+                      </a>
+                    ) : (
+                      <span className="text-sm text-[var(--muted)] shrink-0" title="Jira key saved; open URL missing">
+                        {t.jira_key}
+                      </span>
+                    )
                   ) : null}
                 </div>
                 <p className="text-sm mt-3 whitespace-pre-wrap leading-relaxed">{t.body}</p>
@@ -1419,39 +1484,22 @@ export default function ClientDetailPage() {
                 After each competitor check we save a written summary you can share. One can also run automatically about
                 once a day — or start a fresh one anytime.
               </p>
-              <Button onClick={runIntel} disabled={!!busy}>
-                {busy === "pack" ? "Working…" : "Check competitors & make a report"}
-              </Button>
-            </Card>
-            {reports.map((r) => (
-              <Card key={r.id}>
-                <div className="font-semibold">{r.title}</div>
-                <p className="mt-2 text-sm leading-relaxed text-[var(--ink)]">{r.summary}</p>
-                {Array.isArray(r.sections) && r.sections.length ? (
-                  <div className="mt-4 space-y-3">
-                    {r.sections.slice(0, 4).map((section: any, idx: number) => (
-                      <div key={`${r.id}-sec-${idx}`} className="rounded-xl border border-[var(--line)] bg-white/50 px-3 py-2.5">
-                        <div className="text-sm font-medium text-[var(--ink)]">{section.heading}</div>
-                        <ul className="mt-1.5 list-disc space-y-1 pl-4 text-sm text-[var(--muted)]">
-                          {(section.bullets || []).slice(0, 4).map((b: string, bi: number) => (
-                            <li key={`${r.id}-${idx}-${bi}`}>{b}</li>
-                          ))}
-                        </ul>
-                      </div>
-                    ))}
-                  </div>
-                ) : null}
-                <div className="mt-2 text-xs text-[var(--muted)]">
-                  {r.created_at ? new Date(r.created_at).toLocaleString() : ""}
-                </div>
-                <Button
-                  className="mt-3"
-                  variant="ghost"
-                  onClick={() => downloadReportPdf(r.id, `${r.title}.pdf`).catch((e) => setError(e.message))}
-                >
-                  Download PDF
+              <div className="flex flex-wrap gap-2">
+                <Button onClick={runIntel} disabled={!!busy}>
+                  {busy === "pack" ? "Working…" : "Check competitors & make a report"}
                 </Button>
-              </Card>
+                <Button variant="ghost" onClick={() => void generateWeeklyBrief()} disabled={!!busy}>
+                  {busy === "brief" ? "Writing…" : "Write weekly summary"}
+                </Button>
+              </div>
+            </Card>
+            {reports.map((r, idx) => (
+              <ReportCard
+                key={r.id}
+                report={r}
+                defaultExpanded={idx === 0}
+                onError={(msg) => setError(msg)}
+              />
             ))}
             {!reports.length ? (
               <Card>
@@ -1611,5 +1659,30 @@ export default function ClientDetailPage() {
         ) : null}
       </div>
     </AppShell>
+  );
+}
+
+export default function ClientDetailPage() {
+  return (
+    <Suspense
+      fallback={
+        <AppShell>
+          <Card className="max-w-lg">
+            <div className="flex items-center gap-3">
+              <span className="relative flex h-10 w-10 items-center justify-center">
+                <span className="absolute inset-0 animate-ping rounded-full bg-[var(--accent-soft)] opacity-70" />
+                <span className="relative h-3 w-3 rounded-full bg-[var(--accent)]" />
+              </span>
+              <div>
+                <div className="font-medium text-[var(--ink)]">Loading this client…</div>
+                <div className="text-sm text-[var(--muted)]">Preparing workspace tabs…</div>
+              </div>
+            </div>
+          </Card>
+        </AppShell>
+      }
+    >
+      <ClientDetailPageInner />
+    </Suspense>
   );
 }

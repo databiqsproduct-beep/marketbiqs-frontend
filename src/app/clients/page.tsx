@@ -1,12 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useEffect, useState } from "react";
-import { Radar } from "lucide-react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
+import { Radar, Search } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { IntelProgressOverlay, IntelRunPhase, useIntelProgress } from "@/components/IntelProgress";
+import { IntelSetupDialog, IntelSetupOptions } from "@/components/IntelSetupDialog";
 import { Button, Card, Input, Label, PageHeader } from "@/components/ui";
-import { api, runClientIntel } from "@/lib/api";
+import { ApiRequestError, api, runClientIntel } from "@/lib/api";
 
 type Client = {
   id: string;
@@ -23,13 +24,18 @@ type Client = {
   alerts_open?: number;
 };
 
+type StatusFilter = "active" | "archived" | "all";
+
 export default function ClientsPage() {
   const [clients, setClients] = useState<Client[]>([]);
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [busyId, setBusyId] = useState("");
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  const [query, setQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("active");
   const [form, setForm] = useState({
     name: "",
     industry: "",
@@ -42,68 +48,67 @@ export default function ClientsPage() {
   const [intelSuccess, setIntelSuccess] = useState("");
   const [intelError, setIntelError] = useState("");
   const intelProgress = useIntelProgress(intelOpen && intelPhase === "running");
+  const [setupOpen, setSetupOpen] = useState(false);
+  const [setupClient, setSetupClient] = useState<Client | null>(null);
+  const [pendingCreate, setPendingCreate] = useState(false);
 
   async function load() {
-    const data = await api<Client[]>("/api/clients");
-    setClients(data);
+    setLoading(true);
+    try {
+      const data = await api<Client[]>("/api/clients?include_inactive=true");
+      setClients(data);
+      setError("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load clients");
+    } finally {
+      setLoading(false);
+    }
   }
 
   useEffect(() => {
-    load().catch((err) => setError(err.message));
+    void load();
   }, []);
+
+  const filtered = useMemo(() => {
+    let rows = clients;
+    if (statusFilter === "active") rows = rows.filter((c) => c.is_active);
+    if (statusFilter === "archived") rows = rows.filter((c) => !c.is_active);
+    const q = query.trim().toLowerCase();
+    if (q) {
+      rows = rows.filter(
+        (c) =>
+          c.name.toLowerCase().includes(q) ||
+          (c.industry || "").toLowerCase().includes(q) ||
+          (c.website || "").toLowerCase().includes(q),
+      );
+    }
+    return rows;
+  }, [clients, statusFilter, query]);
+
+  const activeCount = clients.filter((c) => c.is_active).length;
+  const archivedCount = clients.filter((c) => !c.is_active).length;
 
   async function onCreate(e: FormEvent) {
     e.preventDefault();
     setError("");
     setMessage("");
-    setBusy(true);
-    setIntelName(form.name);
-    setIntelSuccess("");
-    setIntelError("");
-    setIntelPhase("running");
-    setIntelOpen(true);
-    try {
-      const created = await api<Client>("/api/clients", {
-        method: "POST",
-        body: JSON.stringify({
-          name: form.name,
-          industry: form.industry || null,
-          website: form.website || null,
-          delivery_emails: form.delivery_emails
-            .split(",")
-            .map((s) => s.trim())
-            .filter(Boolean),
-        }),
-      });
-      const job = await runClientIntel(created.id, {
-        competitor_scope: "global",
-        competitor_country: "United States",
-        competitor_count: 5,
-        competitor_mode: "add",
-      });
-      const pack = job.result_meta?.pack;
-      const enrich = job.result_meta?.enrich;
-      const summary = `“${created.name}” ready · ${enrich?.features || 0} features · ${pack?.competitors || 0} rivals`;
-      setMessage(summary);
-      setIntelSuccess(summary);
-      setIntelPhase("success");
-      setForm({ name: "", industry: "", website: "", delivery_emails: "" });
-      setOpen(false);
-      await load();
-    } catch (err) {
-      const detail = err instanceof Error ? err.message : "Failed";
-      setError(detail);
-      setIntelError(detail);
-      setIntelPhase("error");
-      await load().catch(() => undefined);
-    } finally {
-      setBusy(false);
-    }
+    setPendingCreate(true);
+    setSetupClient({
+      id: "",
+      name: form.name,
+      industry: form.industry || null,
+      website: form.website || null,
+      is_active: true,
+      delivery_channel: "email",
+      rivals_count: 0,
+    });
+    setSetupOpen(true);
   }
 
-  async function runIntel(clientId: string, name: string) {
-    setBusyId(clientId);
-    setIntelName(name);
+  async function startIntelForClient(client: Client, options: IntelSetupOptions) {
+    setSetupOpen(false);
+    setBusyId(client.id);
+    setIntelName(client.name);
     setError("");
     setMessage("");
     setIntelSuccess("");
@@ -111,15 +116,10 @@ export default function ClientsPage() {
     setIntelPhase("running");
     setIntelOpen(true);
     try {
-      const job = await runClientIntel(clientId, {
-        competitor_scope: "global",
-        competitor_country: "United States",
-        competitor_count: 5,
-        competitor_mode: "add",
-      });
+      const job = await runClientIntel(client.id, options);
       const pack = job.result_meta?.pack;
       const enrich = job.result_meta?.enrich;
-      const summary = `Intel complete for ${name} · features ${enrich?.features || 0} · rivals ${pack?.competitors || 0}`;
+      const summary = `Intel complete for ${client.name} · features ${enrich?.features || 0} · rivals ${pack?.competitors || 0}`;
       setMessage(summary);
       setIntelSuccess(summary);
       setIntelPhase("success");
@@ -132,6 +132,69 @@ export default function ClientsPage() {
     } finally {
       setBusyId("");
     }
+  }
+
+  async function onConfirmSetup(options: IntelSetupOptions) {
+    if (pendingCreate) {
+      setSetupOpen(false);
+      setPendingCreate(false);
+      setBusy(true);
+      try {
+        const created = await api<Client>("/api/clients", {
+          method: "POST",
+          body: JSON.stringify({
+            name: form.name,
+            industry: form.industry || null,
+            website: form.website || null,
+            delivery_emails: form.delivery_emails
+              .split(",")
+              .map((s) => s.trim())
+              .filter(Boolean),
+          }),
+        });
+        setIntelName(created.name);
+        setIntelSuccess("");
+        setIntelError("");
+        setIntelPhase("running");
+        setIntelOpen(true);
+        const job = await runClientIntel(created.id, options);
+        const pack = job.result_meta?.pack;
+        const enrich = job.result_meta?.enrich;
+        const summary = `“${created.name}” ready · ${enrich?.features || 0} features · ${pack?.competitors || 0} rivals`;
+        setMessage(summary);
+        setIntelSuccess(summary);
+        setIntelPhase("success");
+        setForm({ name: "", industry: "", website: "", delivery_emails: "" });
+        setOpen(false);
+        await load();
+      } catch (err) {
+        const detail = err instanceof Error ? err.message : "Failed";
+        const billingBlocked = err instanceof ApiRequestError && err.status === 402;
+        setError(detail);
+        if (billingBlocked) {
+          setIntelOpen(false);
+        } else {
+          setIntelError(detail);
+          setIntelPhase("error");
+        }
+        await load().catch(() => undefined);
+      } finally {
+        setBusy(false);
+        setSetupClient(null);
+      }
+      return;
+    }
+
+    if (setupClient?.id) {
+      await startIntelForClient(setupClient, options);
+      setSetupClient(null);
+    }
+  }
+
+  function runIntel(client: Client) {
+    setPendingCreate(false);
+    setSetupClient(client);
+    setSetupOpen(true);
   }
 
   async function archiveClient(clientId: string, name: string) {
@@ -157,10 +220,41 @@ export default function ClientsPage() {
     }
   }
 
+  async function restoreClient(clientId: string, name: string) {
+    setBusyId(`restore-${clientId}`);
+    setError("");
+    setMessage("");
+    try {
+      await api(`/api/clients/${clientId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ is_active: true }),
+      });
+      setMessage(`“${name}” restored to active clients`);
+      setStatusFilter("active");
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not restore client");
+    } finally {
+      setBusyId("");
+    }
+  }
+
   const isBusy = busy || !!busyId;
 
   return (
     <AppShell>
+      <IntelSetupDialog
+        open={setupOpen}
+        clientName={setupClient?.name || form.name}
+        existingCompetitorCount={setupClient?.rivals_count ?? 0}
+        busy={isBusy}
+        onCancel={() => {
+          setSetupOpen(false);
+          setPendingCreate(false);
+          setSetupClient(null);
+        }}
+        onConfirm={onConfirmSetup}
+      />
       <IntelProgressOverlay
         open={intelOpen}
         phase={intelPhase}
@@ -176,9 +270,20 @@ export default function ClientsPage() {
       <PageHeader
         title="Clients"
         subtitle="Add a brand, open its workspace, or check competitors from here — no separate tracker needed."
-        actions={<Button onClick={() => setOpen((v) => !v)}>{open ? "Close form" : "Add client"}</Button>}
+        actions={
+          <Button onClick={() => setOpen((v) => !v)}>{open ? "Close form" : "Add client"}</Button>
+        }
       />
-      {error ? <p className="mb-4 text-red-600">{error}</p> : null}
+      {error ? (
+        <p className="mb-4 text-red-600">
+          {error}{" "}
+          {/billing|client limit|payg/i.test(error) ? (
+            <Link href="/billing" className="underline">
+              Open Billing
+            </Link>
+          ) : null}
+        </p>
+      ) : null}
       {message ? <p className="mb-4 text-[var(--accent)]">{message}</p> : null}
 
       {open ? (
@@ -187,7 +292,11 @@ export default function ClientsPage() {
           <form onSubmit={onCreate} className="max-w-2xl space-y-4">
             <div>
               <Label>Client name</Label>
-              <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
+              <Input
+                value={form.name}
+                onChange={(e) => setForm({ ...form, name: e.target.value })}
+                required
+              />
             </div>
             <div>
               <Label>Website</Label>
@@ -200,7 +309,10 @@ export default function ClientsPage() {
             </div>
             <div>
               <Label>Industry</Label>
-              <Input value={form.industry} onChange={(e) => setForm({ ...form, industry: e.target.value })} />
+              <Input
+                value={form.industry}
+                onChange={(e) => setForm({ ...form, industry: e.target.value })}
+              />
             </div>
             <div>
               <Label>Delivery emails</Label>
@@ -211,96 +323,161 @@ export default function ClientsPage() {
               />
             </div>
             <p className="text-sm text-[var(--muted)]">
-              Saving starts rival tracking. You can also check competitors again anytime from the list below.
+              Next you’ll choose how many competitors to find and where to look — then we start tracking.
             </p>
             <Button type="submit" disabled={isBusy}>
-              {busy ? "Working…" : "Create & check competitors"}
+              {busy ? "Working…" : "Continue to competitor setup"}
             </Button>
           </form>
         </Card>
       ) : null}
 
       <Card className="overflow-hidden p-0">
-        <div className="flex items-center justify-between border-b border-[var(--line)] px-5 py-4">
-          <div>
-            <div className="font-semibold">{clients.length} clients</div>
+        <div className="flex flex-col gap-3 border-b border-[var(--line)] px-4 py-4 sm:px-5 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
+            <div className="font-semibold">
+              {filtered.length} client{filtered.length === 1 ? "" : "s"}
+              {statusFilter !== "all" ? ` · ${statusFilter}` : ""}
+            </div>
             <div className="mt-0.5 text-xs text-[var(--muted)]">
-              Open a client for full details, or check competitors without leaving this page
+              {activeCount} active · {archivedCount} archived
+            </div>
+          </div>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <div className="relative w-full sm:w-56">
+              <Search
+                size={16}
+                className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--muted)]"
+              />
+              <Input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search clients…"
+                className="pl-9"
+                aria-label="Search clients"
+              />
+            </div>
+            <div className="flex flex-wrap gap-2" role="group" aria-label="Status filter">
+              {(
+                [
+                  ["active", "Active"],
+                  ["archived", "Archived"],
+                  ["all", "All"],
+                ] as const
+              ).map(([id, label]) => (
+                <Button
+                  key={id}
+                  type="button"
+                  variant={statusFilter === id ? "primary" : "ghost"}
+                  className="!px-3 !py-2 text-xs"
+                  onClick={() => setStatusFilter(id)}
+                >
+                  {label}
+                </Button>
+              ))}
             </div>
           </div>
         </div>
         <div className="divide-y divide-[var(--line)]">
-          {clients.map((c) => (
-            <div key={c.id} className="px-5 py-4 transition hover:bg-black/[0.02]">
-              <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Link href={`/clients/${c.id}`} className="truncate font-semibold hover:text-[var(--accent)]">
-                      {c.name}
-                    </Link>
-                    <span
-                      className={`text-[10px] uppercase tracking-wide ${
-                        c.is_active ? "text-[var(--accent)]" : "text-red-500"
-                      }`}
-                    >
-                      {c.is_active ? "Active" : "Inactive"}
-                    </span>
-                  </div>
-                  <p className="mt-1 truncate text-sm text-[var(--muted)]">
-                    {c.industry || "Industry TBD"} · {c.website || "No website"} · delivery {c.delivery_channel}
-                  </p>
-                  <div className="mt-2 flex flex-wrap gap-4 text-sm text-[var(--muted)]">
-                    <span>
-                      <strong className="text-[var(--ink)]">{c.rivals_count ?? 0}</strong> competitors
-                    </span>
-                    <span>
-                      <strong className="text-[var(--ink)]">{c.features_count ?? 0}</strong> features
-                    </span>
-                    <span>
-                      <strong className="text-[var(--ink)]">{c.alerts_open ?? 0}</strong> warnings
-                    </span>
-                    <span>
-                      <strong className="text-[var(--ink)]">{c.reports_count ?? 0}</strong> reports
-                    </span>
-                  </div>
-                </div>
-                <div className="flex flex-wrap gap-2 shrink-0">
-                  <Link href={`/clients/${c.id}`}>
-                    <Button variant="ghost" className="!px-3 !py-2 text-sm">
-                      Open
-                    </Button>
-                  </Link>
-                  <Button
-                    className="!px-3 !py-2 text-sm"
-                    onClick={() => runIntel(c.id, c.name)}
-                    disabled={isBusy}
-                    title="Check competitors"
-                  >
-                    {busyId === c.id ? (
-                      "Working…"
-                    ) : (
-                      <span className="inline-flex items-center gap-1.5">
-                        <Radar size={14} /> Check competitors
+          {loading ? (
+            <div className="space-y-3 px-5 py-5 animate-pulse" aria-busy="true">
+              {[0, 1, 2].map((i) => (
+                <div key={i} className="h-16 rounded-xl bg-black/[0.04]" />
+              ))}
+            </div>
+          ) : null}
+          {!loading &&
+            filtered.map((c) => (
+              <div key={c.id} className="px-4 py-4 transition hover:bg-black/[0.02] sm:px-5">
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Link
+                        href={`/clients/${c.id}`}
+                        className="truncate font-semibold hover:text-[var(--accent)]"
+                      >
+                        {c.name}
+                      </Link>
+                      <span
+                        className={`text-[10px] uppercase tracking-wide ${
+                          c.is_active ? "text-[var(--accent)]" : "text-red-500"
+                        }`}
+                      >
+                        {c.is_active ? "Active" : "Archived"}
                       </span>
+                    </div>
+                    <p className="mt-1 break-words text-sm text-[var(--muted)]">
+                      {c.industry || "Industry TBD"} · {c.website || "No website"} · delivery{" "}
+                      {c.delivery_channel}
+                    </p>
+                    <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-[var(--muted)]">
+                      <span>
+                        <strong className="text-[var(--ink)]">{c.rivals_count ?? 0}</strong> competitors
+                      </span>
+                      <span>
+                        <strong className="text-[var(--ink)]">{c.features_count ?? 0}</strong> features
+                      </span>
+                      <span>
+                        <strong className="text-[var(--ink)]">{c.alerts_open ?? 0}</strong> warnings
+                      </span>
+                      <span>
+                        <strong className="text-[var(--ink)]">{c.reports_count ?? 0}</strong> reports
+                      </span>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:shrink-0">
+                    <Link href={`/clients/${c.id}`} className="col-span-1">
+                      <Button variant="ghost" className="w-full !px-3 !py-2 text-sm sm:w-auto">
+                        Open
+                      </Button>
+                    </Link>
+                    {c.is_active ? (
+                      <>
+                        <Button
+                          className="col-span-1 w-full !px-3 !py-2 text-sm sm:w-auto"
+                          onClick={() => runIntel(c)}
+                          disabled={isBusy}
+                          title="Check competitors"
+                        >
+                          {busyId === c.id ? (
+                            "Working…"
+                          ) : (
+                            <span className="inline-flex items-center gap-1.5">
+                              <Radar size={14} /> Check
+                            </span>
+                          )}
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          className="col-span-2 w-full !px-3 !py-2 text-sm !border-red-200 !text-red-700 hover:!bg-red-50 sm:col-span-1 sm:w-auto"
+                          disabled={isBusy}
+                          onClick={() => void archiveClient(c.id, c.name)}
+                          title="Archive client"
+                        >
+                          {busyId === `archive-${c.id}` ? "Archiving…" : "Archive"}
+                        </Button>
+                      </>
+                    ) : (
+                      <Button
+                        className="col-span-1 w-full !px-3 !py-2 text-sm sm:w-auto"
+                        disabled={isBusy}
+                        onClick={() => void restoreClient(c.id, c.name)}
+                      >
+                        {busyId === `restore-${c.id}` ? "Restoring…" : "Restore"}
+                      </Button>
                     )}
-                  </Button>
-                  {c.is_active ? (
-                    <Button
-                      variant="ghost"
-                      className="!px-3 !py-2 text-sm !border-red-200 !text-red-700 hover:!bg-red-50"
-                      disabled={isBusy}
-                      onClick={() => void archiveClient(c.id, c.name)}
-                      title="Archive client"
-                    >
-                      {busyId === `archive-${c.id}` ? "Archiving…" : "Archive"}
-                    </Button>
-                  ) : null}
+                  </div>
                 </div>
               </div>
+            ))}
+          {!loading && !filtered.length ? (
+            <div className="px-5 py-10 text-center text-sm text-[var(--muted)]">
+              {query
+                ? "No clients match your search."
+                : statusFilter === "archived"
+                  ? "No archived clients."
+                  : "No clients yet. Add your first brand above."}
             </div>
-          ))}
-          {!clients.length ? (
-            <div className="px-5 py-10 text-sm text-[var(--muted)]">No clients yet. Add your first brand above.</div>
           ) : null}
         </div>
       </Card>

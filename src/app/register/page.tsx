@@ -7,11 +7,10 @@ import { useAuth } from "@/lib/auth";
 import { Button, Card, Input, Label } from "@/components/ui";
 
 function RegisterForm() {
-  const { register, bootstrap, loginWithGoogle, logout, user, needsBootstrap } = useAuth();
+  const { register, bootstrap, loginWithGoogle, user, needsBootstrap } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
   const [submitting, setSubmitting] = useState(false);
-  const [signingOut, setSigningOut] = useState(false);
   // Don't flip to workspace-only UI mid-submit — that left people stuck on "Creating..."
   const oauthMode =
     !submitting &&
@@ -26,6 +25,11 @@ function RegisterForm() {
   });
   const [error, setError] = useState("");
   const [googleLoading, setGoogleLoading] = useState(false);
+  const isIndividual = form.workspace_mode === "creator";
+  const nameLabel = isIndividual ? "Your preferred name on reports" : "Agency name";
+  const nameHint = isIndividual
+    ? "This name appears on PDFs, the client portal, and email delivery."
+    : "This is the white-label name on reports you send to clients.";
 
   useEffect(() => {
     if (user?.full_name && !form.full_name) {
@@ -44,7 +48,9 @@ function RegisterForm() {
     try {
       if (oauthMode) {
         if (!form.agency_name.trim()) {
-          throw new Error("Enter an agency / workspace name.");
+          throw new Error(
+            isIndividual ? "Enter your preferred name on reports." : "Enter an agency / workspace name.",
+          );
         }
         const me = await bootstrap({
           agency_name: form.agency_name.trim(),
@@ -75,30 +81,26 @@ function RegisterForm() {
     }
   }
 
-  async function onSignOutStartOver() {
-    setSigningOut(true);
-    setError("");
-    try {
-      await logout();
-      router.replace("/register");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not sign out");
-      setSigningOut(false);
-    }
-  }
-
-  const busy = submitting || googleLoading || signingOut;
+  const busy = submitting || googleLoading;
 
   return (
     <div className="min-h-screen grid place-items-center px-4 py-10">
       <Card className="w-full max-w-lg">
         <div className="font-[family-name:var(--font-display)] text-3xl text-[var(--accent)]">MarketBiqs</div>
         <h1 className="mt-2 text-xl font-semibold">
-          {oauthMode ? "Name your workspace" : "Create your agency workspace"}
+          {oauthMode
+            ? isIndividual
+              ? "Name your reports"
+              : "Name your workspace"
+            : isIndividual
+              ? "Create your Individual workspace"
+              : "Create your agency workspace"}
         </h1>
         <p className="mt-1 text-sm text-[var(--muted)]">
           {oauthMode
-            ? "You’re signed in. Choose a workspace name to continue."
+            ? isIndividual
+              ? "You’re signed in. Choose the name that appears on reports."
+              : "You’re signed in. Choose a workspace name to continue."
             : "Self-serve setup in under 10 minutes."}
         </p>
 
@@ -166,15 +168,6 @@ function RegisterForm() {
             </div>
           )}
           <div>
-            <Label>Agency name</Label>
-            <Input
-              value={form.agency_name}
-              onChange={(e) => setForm({ ...form, agency_name: e.target.value })}
-              required
-              disabled={busy}
-            />
-          </div>
-          <div>
             <Label>Workspace mode</Label>
             <select
               className="w-full rounded-xl border border-[var(--line)] bg-white px-3 py-2.5 text-sm disabled:opacity-60"
@@ -186,32 +179,27 @@ function RegisterForm() {
               <option value="creator">Individual client</option>
             </select>
           </div>
+          <div>
+            <Label>{nameLabel}</Label>
+            <Input
+              value={form.agency_name}
+              onChange={(e) => setForm({ ...form, agency_name: e.target.value })}
+              placeholder={isIndividual ? "e.g. Ali — Market intel" : "e.g. Northstar Agency"}
+              required
+              disabled={busy}
+            />
+            <p className="mt-1.5 text-xs text-[var(--muted)]">{nameHint}</p>
+          </div>
           {error ? <p className="text-sm text-red-600">{error}</p> : null}
           <Button type="submit" disabled={busy} className="w-full">
             {submitting ? "Creating..." : "Create workspace"}
           </Button>
         </form>
         <p className="mt-4 text-sm text-[var(--muted)]">
-          {oauthMode ? (
-            <>
-              Want a fresh start?{" "}
-              <button
-                type="button"
-                className="text-[var(--accent)] underline-offset-2 hover:underline disabled:opacity-60"
-                disabled={busy}
-                onClick={() => void onSignOutStartOver()}
-              >
-                {signingOut ? "Signing out…" : "Sign out and start over"}
-              </button>
-            </>
-          ) : (
-            <>
-              Already have an account?{" "}
-              <Link href="/login" className="text-[var(--accent)]">
-                Sign in
-              </Link>
-            </>
-          )}
+          Already have an account?{" "}
+          <Link href="/login" className="text-[var(--accent)]">
+            Sign in
+          </Link>
         </p>
       </Card>
     </div>

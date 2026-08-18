@@ -23,7 +23,12 @@ import {
 import { useAuth } from "@/lib/auth";
 import clsx from "clsx";
 
-type NavItem = { href: string; label: string; icon: React.ComponentType<{ size?: number }> };
+type NavItem = {
+  href: string;
+  label: string;
+  icon: React.ComponentType<{ size?: number }>;
+  billingAdminOnly?: boolean;
+};
 
 const workNav: NavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -36,7 +41,7 @@ const workNav: NavItem[] = [
 
 const settingsNav: NavItem[] = [
   { href: "/team", label: "Team", icon: Users },
-  { href: "/billing", label: "Billing", icon: CreditCard },
+  { href: "/billing", label: "Billing", icon: CreditCard, billingAdminOnly: true },
   { href: "/branding", label: "Branding", icon: Palette },
   { href: "/integrations", label: "Integrations", icon: Plug },
   { href: "/byok", label: "BYOK", icon: KeyRound },
@@ -47,11 +52,13 @@ function NavSection({
   label,
   items,
   pathname,
+  role,
   onNavigate,
 }: {
   label: string;
   items: NavItem[];
   pathname: string;
+  role?: string | null;
   onNavigate?: () => void;
 }) {
   return (
@@ -59,7 +66,7 @@ function NavSection({
       <div className="px-3 pt-3 pb-1 text-[10px] font-medium uppercase tracking-wider text-[var(--muted)]">
         {label}
       </div>
-      {items.map((item) => {
+      {items.filter((item) => !item.billingAdminOnly || role === "owner" || role === "admin").map((item) => {
         const Icon = item.icon;
         const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
         return (
@@ -87,12 +94,14 @@ function SidebarContent({
   agency,
   user,
   pathname,
+  role,
   onNavigate,
   onLogout,
 }: {
   agency: { name?: string | null; logo_url?: string | null };
   user: { full_name: string; email: string };
   pathname: string;
+  role?: string | null;
   onNavigate?: () => void;
   onLogout: () => void;
 }) {
@@ -117,8 +126,8 @@ function SidebarContent({
         </div>
       </div>
       <nav className="flex-1 p-3 space-y-4 overflow-y-auto overscroll-contain">
-        <NavSection label="Work" items={workNav} pathname={pathname} onNavigate={onNavigate} />
-        <NavSection label="Settings" items={settingsNav} pathname={pathname} onNavigate={onNavigate} />
+        <NavSection label="Work" items={workNav} pathname={pathname} role={role} onNavigate={onNavigate} />
+        <NavSection label="Settings" items={settingsNav} pathname={pathname} role={role} onNavigate={onNavigate} />
       </nav>
       <div className="p-4 border-t border-[var(--line)] shrink-0">
         <div className="text-sm font-medium truncate">{user.full_name}</div>
@@ -137,7 +146,7 @@ function SidebarContent({
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { agency, user, logout, loading, needsBootstrap } = useAuth();
+  const { agency, user, role, logout, loading, needsBootstrap } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
 
   useEffect(() => {
@@ -192,6 +201,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           agency={agency}
           user={user}
           pathname={pathname}
+          role={role}
           onLogout={handleLogout}
         />
       </aside>
@@ -243,6 +253,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               agency={agency}
               user={user}
               pathname={pathname}
+              role={role}
               onNavigate={() => setMenuOpen(false)}
               onLogout={handleLogout}
             />
