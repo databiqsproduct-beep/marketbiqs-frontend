@@ -18,6 +18,7 @@ function toColorInput(value: string | null | undefined, fallback: string) {
 
 export default function BrandingPage() {
   const { agency, refresh } = useAuth();
+  const isIndividual = agency?.workspace_mode === "creator" || agency?.plan === "creator";
   const [form, setForm] = useState({
     name: "",
     logo_url: "",
@@ -46,7 +47,7 @@ export default function BrandingPage() {
     setMessage("");
     const name = form.name.trim();
     if (!name) {
-      setError("Enter an agency name.");
+      setError(isIndividual ? "Enter your preferred name on reports." : "Enter an agency name.");
       return;
     }
     const brand_color = toColorInput(form.brand_color, "#0f766e");
@@ -76,16 +77,25 @@ export default function BrandingPage() {
   return (
     <AppShell>
       <PageHeader
-        title="Agency branding"
-        subtitle="White-label PDF reports and workspace accents use these settings."
+        title={isIndividual ? "Report branding" : "Agency branding"}
+        subtitle={
+          isIndividual
+            ? "This name and colors appear on PDFs and the client portal."
+            : "White-label PDF reports and workspace accents use these settings."
+        }
       />
       {error ? <p className="text-red-600 mb-4">{error}</p> : null}
       {message ? <p className="text-[var(--accent)] mb-4">{message}</p> : null}
       <Card className="max-w-2xl">
         <form onSubmit={onSave} className="space-y-4">
           <div>
-            <Label>Agency name</Label>
-            <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
+            <Label>{isIndividual ? "Your preferred name on reports" : "Agency name"}</Label>
+            <Input
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+              placeholder={isIndividual ? "e.g. Ali — Market intel" : "e.g. Northstar Agency"}
+              required
+            />
           </div>
           <div>
             <Label>Logo URL</Label>
@@ -133,7 +143,7 @@ export default function BrandingPage() {
           >
             <div className="text-sm text-[var(--muted)] mb-2">Live preview</div>
             <div className="font-[family-name:var(--font-display)] text-2xl" style={{ color: form.brand_color }}>
-              {form.name || "Agency name"}
+              {form.name || (isIndividual ? "Your preferred name on reports" : "Agency name")}
             </div>
             <button
               type="button"

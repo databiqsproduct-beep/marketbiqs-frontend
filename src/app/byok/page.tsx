@@ -52,7 +52,7 @@ export default function ByokPage() {
         body: JSON.stringify({ provider, api_key: key }),
       });
       setApiKey("");
-      setMessage("API key saved. Budget discount recalculated.");
+      setMessage("API key saved. Billing price updated with BYOK discount.");
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Save failed");
@@ -121,8 +121,11 @@ export default function ByokPage() {
           </form>
           {budget ? (
             <p className="mt-4 text-sm text-[var(--muted)]">
-              Current BYOK discount: {budget.byok_discount_percent ?? 0}% · Est. monthly $
-              {(((budget.estimated_monthly_cents ?? 0) as number) / 100).toFixed(0)}
+              Current BYOK discount: {budget.byok_discount_percent ?? 0}% · Est. monthly{" "}
+              {budget.byok_discount_percent && (budget.list_price_cents || 0) > (budget.estimated_monthly_cents || 0)
+                ? `$${(((budget.estimated_monthly_cents ?? 0) as number) / 100).toFixed(0)} (was $${(((budget.list_price_cents ?? 0) as number) / 100).toFixed(0)})`
+                : `$${(((budget.estimated_monthly_cents ?? 0) as number) / 100).toFixed(0)}`}
+              . Billing tab uses this discounted total.
             </p>
           ) : null}
         </Card>

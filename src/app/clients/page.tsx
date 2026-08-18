@@ -7,7 +7,7 @@ import { AppShell } from "@/components/AppShell";
 import { IntelProgressOverlay, IntelRunPhase, useIntelProgress } from "@/components/IntelProgress";
 import { IntelSetupDialog, IntelSetupOptions } from "@/components/IntelSetupDialog";
 import { Button, Card, Input, Label, PageHeader } from "@/components/ui";
-import { api, runClientIntel } from "@/lib/api";
+import { ApiRequestError, api, runClientIntel } from "@/lib/api";
 
 type Client = {
   id: string;
@@ -139,11 +139,6 @@ export default function ClientsPage() {
       setSetupOpen(false);
       setPendingCreate(false);
       setBusy(true);
-      setIntelName(form.name);
-      setIntelSuccess("");
-      setIntelError("");
-      setIntelPhase("running");
-      setIntelOpen(true);
       try {
         const created = await api<Client>("/api/clients", {
           method: "POST",
@@ -157,6 +152,11 @@ export default function ClientsPage() {
               .filter(Boolean),
           }),
         });
+        setIntelName(created.name);
+        setIntelSuccess("");
+        setIntelError("");
+        setIntelPhase("running");
+        setIntelOpen(true);
         const job = await runClientIntel(created.id, options);
         const pack = job.result_meta?.pack;
         const enrich = job.result_meta?.enrich;
@@ -169,9 +169,14 @@ export default function ClientsPage() {
         await load();
       } catch (err) {
         const detail = err instanceof Error ? err.message : "Failed";
+        const billingBlocked = err instanceof ApiRequestError && err.status === 402;
         setError(detail);
-        setIntelError(detail);
-        setIntelPhase("error");
+        if (billingBlocked) {
+          setIntelOpen(false);
+        } else {
+          setIntelError(detail);
+          setIntelPhase("error");
+        }
         await load().catch(() => undefined);
       } finally {
         setBusy(false);
@@ -269,7 +274,16 @@ export default function ClientsPage() {
           <Button onClick={() => setOpen((v) => !v)}>{open ? "Close form" : "Add client"}</Button>
         }
       />
-      {error ? <p className="mb-4 text-red-600">{error}</p> : null}
+      {error ? (
+        <p className="mb-4 text-red-600">
+          {error}{" "}
+          {/billing|client limit|payg/i.test(error) ? (
+            <Link href="/billing" className="underline">
+              Open Billing
+            </Link>
+          ) : null}
+        </p>
+      ) : null}
       {message ? <p className="mb-4 text-[var(--accent)]">{message}</p> : null}
 
       {open ? (

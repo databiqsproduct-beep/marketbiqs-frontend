@@ -197,7 +197,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const me = await refresh();
       if (opts?.requireMe && !me) {
         throw new Error(
-          "Could not verify your session with the API. Try again in a moment — if it keeps failing, confirm frontend and backend use the same Supabase project.",
+          "Could not verify your session with the API. Frontend and backend must use the same Supabase project.",
         );
       }
       return me;
@@ -278,7 +278,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }) => {
       const sb = requireSupabase();
       if (!payload.agency_name.trim()) {
-        throw new Error("Enter an agency / workspace name.");
+        throw new Error(
+          payload.workspace_mode === "creator"
+            ? "Enter your preferred name on reports."
+            : "Enter an agency / workspace name.",
+        );
       }
       const { data, error } = await sb.auth.signUp({
         email: payload.email.trim(),
