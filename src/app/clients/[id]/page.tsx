@@ -11,6 +11,8 @@ import { IntelSetupDialog, IntelSetupOptions } from "@/components/IntelSetupDial
 import { ReportCard } from "@/components/ReportCard";
 import { Button, Card, Input, Label, PageHeader, Textarea } from "@/components/ui";
 import { api, runClientIntel } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
+import { isIndividualWorkspace } from "@/lib/workspace";
 
 type RadarSectionId = "trends" | "sentiment" | "snapshots" | "jobs";
 
@@ -160,30 +162,34 @@ function featurePlainBlurb(
   );
 }
 
-function tabFromQuery(raw: string | null): Tab {
+function tabFromQuery(raw: string | null, fallback: Tab = "loop"): Tab {
   if (raw === "compare" || raw === "gaps") return "competitors"; // merged into Competitors
   if (raw && (VALID_TABS as string[]).includes(raw)) return raw as Tab;
-  return "loop";
+  return fallback;
 }
 
 function ClientDetailPageInner() {
   const params = useParams<{ id: string }>();
   const searchParams = useSearchParams();
   const router = useRouter();
+  const { agency } = useAuth();
+  const individual = isIndividualWorkspace(agency);
   const clientId = params.id;
-  const [tab, setTabState] = useState<Tab>(() => tabFromQuery(searchParams.get("tab")));
+  const [tab, setTabState] = useState<Tab>(() =>
+    tabFromQuery(searchParams.get("tab"), "loop"),
+  );
 
   const setTab = useCallback(
     (next: Tab) => {
       const resolved = tabFromQuery(next);
       setTabState(resolved);
       const params = new URLSearchParams(searchParams.toString());
-      if (resolved === "loop") params.delete("tab");
+      if (resolved === "loop" && !individual) params.delete("tab");
       else params.set("tab", resolved);
       const qs = params.toString();
       router.replace(qs ? `/clients/${clientId}?${qs}` : `/clients/${clientId}`, { scroll: false });
     },
-    [clientId, router, searchParams],
+    [clientId, individual, router, searchParams],
   );
   const [client, setClient] = useState<any>(null);
   const [competitors, setCompetitors] = useState<any[]>([]);
@@ -226,8 +232,8 @@ function ClientDetailPageInner() {
   }
 
   useEffect(() => {
-    setTabState(tabFromQuery(searchParams.get("tab")));
-  }, [searchParams]);
+    setTabState(tabFromQuery(searchParams.get("tab"), individual ? "competitors" : "loop"));
+  }, [searchParams, individual]);
 
   useEffect(() => {
     clarifyTried.current = false;
@@ -714,6 +720,7 @@ function ClientDetailPageInner() {
         open={setupOpen}
         clientName={client?.name}
         existingCompetitorCount={competitors.filter((c) => c.is_tracking !== false).length}
+        maxTrackedRivals={individual ? 10 : null}
         busy={busy === "pack"}
         onCancel={() => setSetupOpen(false)}
         onConfirm={startIntelRun}
@@ -735,17 +742,19 @@ function ClientDetailPageInner() {
         subtitle={`${client.industry || "Industry not set yet"} · ${competitors.length} competitors watched · checks can run daily, or whenever you click the button`}
         actions={
           <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap">
-            <Link href="/clients" className="col-span-1">
-              <Button variant="ghost" className="w-full sm:w-auto">
-                All clients
-              </Button>
-            </Link>
+            {individual ? null : (
+              <Link href="/clients" className="col-span-1">
+                <Button variant="ghost" className="w-full sm:w-auto">
+                  All clients
+                </Button>
+              </Link>
+            )}
             <Link href={`/portal/${clientId}`} className="col-span-1">
               <Button variant="ghost" className="w-full sm:w-auto">
                 Portal
               </Button>
             </Link>
-            {client.is_active === false ? (
+            {individual ? null : client.is_active === false ? (
               <Button
                 className="col-span-1 w-full sm:w-auto"
                 disabled={!!busy}
@@ -1499,6 +1508,7 @@ function ClientDetailPageInner() {
                 report={r}
                 defaultExpanded={idx === 0}
                 onError={(msg) => setError(msg)}
+                onDeleted={(id) => setReports((prev) => prev.filter((row) => row.id !== id))}
               />
             ))}
             {!reports.length ? (

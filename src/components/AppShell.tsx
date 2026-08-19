@@ -16,11 +16,13 @@ import {
   Palette,
   Plug,
   Send,
+  Swords,
   Users,
   Workflow,
   X,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
+import { isIndividualWorkspace } from "@/lib/workspace";
 import clsx from "clsx";
 
 type NavItem = {
@@ -30,10 +32,18 @@ type NavItem = {
   billingAdminOnly?: boolean;
 };
 
-const workNav: NavItem[] = [
+const agencyWorkNav: NavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/clients", label: "Clients", icon: Building2 },
   { href: "/reports", label: "All reports", icon: FileText },
+  { href: "/delivery", label: "Delivery", icon: Send },
+  { href: "/biqs", label: "Biqs", icon: KanbanSquare },
+  { href: "/assistant", label: "Assistant", icon: Bot },
+];
+
+const individualWorkNav: NavItem[] = [
+  { href: "/clients", label: "Competitors", icon: Swords },
+  { href: "/reports", label: "Reports", icon: FileText },
   { href: "/delivery", label: "Delivery", icon: Send },
   { href: "/biqs", label: "Biqs", icon: KanbanSquare },
   { href: "/assistant", label: "Assistant", icon: Bot },
@@ -98,13 +108,15 @@ function SidebarContent({
   onNavigate,
   onLogout,
 }: {
-  agency: { name?: string | null; logo_url?: string | null };
+  agency: { name?: string | null; logo_url?: string | null; workspace_mode?: string; plan?: string };
   user: { full_name: string; email: string };
   pathname: string;
   role?: string | null;
   onNavigate?: () => void;
   onLogout: () => void;
 }) {
+  const individual = isIndividualWorkspace(agency);
+  const workNav = individual ? individualWorkNav : agencyWorkNav;
   return (
     <>
       <div className="px-5 py-5 sm:py-6 border-b border-[var(--line)]">
@@ -121,7 +133,9 @@ function SidebarContent({
             <div className="font-[family-name:var(--font-display)] text-xl sm:text-2xl tracking-tight text-[var(--accent)] truncate">
               {agency.name || "MarketBiqs"}
             </div>
-            <div className="mt-0.5 text-xs text-[var(--muted)] truncate">MarketBiqs workspace</div>
+            <div className="mt-0.5 text-xs text-[var(--muted)] truncate">
+              {individual ? "Your competitors & reports" : "MarketBiqs workspace"}
+            </div>
           </div>
         </div>
       </div>

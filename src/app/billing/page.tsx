@@ -14,6 +14,7 @@ type Plan = {
   included_clients: number;
   included_reports: number;
   included_scrapes: number;
+  included_rivals?: number;
   checkout_ready: boolean;
 };
 
@@ -38,6 +39,7 @@ type BillingBudget = {
   reports_quota: number;
   scrape_units_used: number;
   scrape_quota: number;
+  max_tracked_rivals?: number | null;
   included_scrape_units?: number;
   scrape_overage_lots?: number;
   intel_runs_used?: number;
@@ -167,7 +169,7 @@ function BillingInner() {
     };
   }, [search, load, canManage]);
 
-  async function checkout(packCount = 0, billingModel = "plan") {
+  async function checkout(packCount = 0, billingModel = "plan", extraScrapeUnits = 0) {
     if (!budget || !canManage) return;
     setError("");
     setMessage("");
@@ -177,6 +179,7 @@ function BillingInner() {
         method: "POST",
         body: JSON.stringify({
           add_client_packs: Math.max(0, Math.floor(packCount)),
+          add_scrape_units: Math.max(0, Math.floor(extraScrapeUnits)),
           billing_model: billingModel,
           request_id: crypto.randomUUID(),
           success_url: `${window.location.origin}/billing?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
@@ -235,7 +238,11 @@ function BillingInner() {
       return;
     }
     if (!budget.has_subscription) {
-      setError("Subscribe to the plan first, then add scrape units.");
+      if (!scrapeUnits) {
+        setError("Choose extra scrape units, then check out with the Individual plan.");
+        return;
+      }
+      await checkout(0, "plan", scrapeUnits);
       return;
     }
     setBusy("scrapes");
@@ -292,7 +299,7 @@ function BillingInner() {
           budget?.billing_model === "payg"
             ? "No fixed $49 plan. Card on file — month-end bill is clients, intel runs, reports, and scrapes you actually used."
             : budget?.plan === "creator"
-              ? "Monthly Individual plan with optional client add-on packs and usage-aware quotas."
+              ? "Individual: $99/month for your brand — 10 reports, 500 scrape units, up to 10 competitors. Extra scrape units $5 per 100. No client packs and no PAYG."
               : "Monthly Agency plan, or usage-based PAYG if you do not want the $450 subscription."
         }
       />
@@ -312,9 +319,15 @@ function BillingInner() {
               </>
             ) : (
               <>
-                <Stat label="Plan" value={budget.plan_name || budget.plan} />
-                <Stat label="Clients" value={`${budget.active_clients ?? 0}/${budget.max_clients ?? 0}`} />
+                <Stat
+                  label={budget.plan === "creator" ? "Your brand" : "Clients"}
+                  value={`${budget.active_clients ?? 0}/${budget.max_clients ?? 0}`}
+                />
                 <Stat label="Reports" value={`${budget.reports_used ?? 0}/${budget.reports_quota ?? 0}`} />
+                <Stat
+                  label="Scrape units"
+                  value={`${(budget.scrape_units_used ?? 0).toLocaleString()}/${(budget.scrape_quota ?? 0).toLocaleString()}`}
+                />
                 <Stat
                   label="Monthly total"
                   value={money(budget.estimated_monthly_cents)}
@@ -323,12 +336,11 @@ function BillingInner() {
             )}
           </div>
           {budget.billing_model === "payg" ? (
-            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+            <div className="grid sm:grid-cols-2 gap-4 mb-6">
               <Stat label="Bill so far" value={money(budget.estimated_monthly_cents, 2)} />
-              <Stat label="Paid so far" value={money(budget.amount_paid_cents ?? 0, 2)} />
               <Stat
                 label="Month-end invoice"
-                value={money(budget.upcoming_invoice_cents ?? budget.estimated_monthly_cents, 2)}
+                value={money(budget.estimated_monthly_cents, 2)}
               />
             </div>
           ) : null}
@@ -400,8 +412,11 @@ function BillingInner() {
                   ) : null}
                 </ul>
                 <p className="mt-3 text-xs text-[var(--muted)]">
-                  Paid so far: {money(budget.amount_paid_cents ?? 0, 2)}. Month-end invoice:{" "}
-                  {money(budget.upcoming_invoice_cents ?? budget.estimated_monthly_cents, 2)}.
+                  Month-end invoice equals this usage total
+                  {budget.billing_period_end
+                    ? ` · due ${new Date(budget.billing_period_end).toLocaleDateString()}`
+                    : ""}
+                  .
                 </p>
               </Card>
               <Card>
@@ -464,9 +479,19 @@ function BillingInner() {
                     </span>
                   </div>
                   <p className="mt-3 text-sm text-[var(--muted)]">
-                    {plan.included_clients} client{plan.included_clients === 1 ? "" : "s"} · {plan.included_reports} reports ·{" "}
-                    {plan.included_scrapes.toLocaleString()} scrape units
+                    {plan.id === "creator"
+                      ? `${plan.included_clients} brand · ${plan.included_reports} reports/month · ${plan.included_scrapes.toLocaleString()} scrape units · up to ${plan.included_rivals ?? budget.max_tracked_rivals ?? 10} competitors`
+                      : `${plan.included_clients} client${plan.included_clients === 1 ? "" : "s"} · ${plan.included_reports} reports · ${plan.included_scrapes.toLocaleString()} scrape units · 10 rivals per intel run`}
                   </p>
+                  {plan.id === "creator" ? (
+                    <ul className="mt-4 space-y-1.5 text-sm text-[var(--muted)]">
+                      <li>Your brand workspace only — no extra client packs.</li>
+                      <li>10 reports per month included.</li>
+                      <li>500 scrape units per month included. Extra lots are $5 per 100 units.</li>
+                      <li>Track up to 10 competitors. Each intel run can refresh or add within that cap (max 10 per run).</li>
+                      <li>PAYG is Agency-only and is not available on Individual.</li>
+                    </ul>
+                  ) : null}
                 </Card>
               ))
           ) : budget.payg_available ? (
@@ -510,11 +535,16 @@ function BillingInner() {
                 <Card key={plan.id} className="mb-4 border-[var(--accent)]">
                   <h2 className="font-semibold">{plan.name}</h2>
                   <div className="mt-1 text-2xl font-semibold">{money(plan.price_cents)}<span className="text-sm font-normal text-[var(--muted)]">/month</span></div>
+                  <p className="mt-3 text-sm text-[var(--muted)]">
+                    {plan.id === "creator"
+                      ? "1 brand · 10 reports · 500 scrape units · up to 10 competitors. Extra scrapes $5/100. No packs, no PAYG."
+                      : `${plan.included_clients} clients · ${plan.included_reports} reports · ${plan.included_scrapes.toLocaleString()} scrape units.`}
+                  </p>
                 </Card>
               ))
           )}
 
-          {budget.has_subscription && budget.billing_model !== "payg" ? (
+          {(budget.has_subscription || budget.plan === "creator") && budget.billing_model !== "payg" ? (
           <>
           <div className="grid lg:grid-cols-2 gap-4">
             <Card>
@@ -522,7 +552,9 @@ function BillingInner() {
                 {`${budget.plan_name} subscription`}
               </h2>
               <p className="text-sm text-[var(--muted)] mt-2">
-                {`Includes ${budget.included_clients} client${budget.included_clients === 1 ? "" : "s"}, ${budget.reports_quota - budget.client_pack_count * budget.catalog.pack.extra_reports} reports, and ${(
+                {budget.plan === "creator"
+                  ? `Includes your brand, ${budget.reports_quota} reports, ${(budget.included_scrape_units || 500).toLocaleString()} scrape units, and up to ${budget.max_tracked_rivals ?? 10} tracked competitors.`
+                  : `Includes ${budget.included_clients} client${budget.included_clients === 1 ? "" : "s"}, ${budget.reports_quota - budget.client_pack_count * budget.catalog.pack.extra_reports} reports, and ${(
                     budget.scrape_quota
                     - budget.client_pack_count * budget.catalog.pack.extra_scrapes
                     - (budget.extra_scrape_units || 0)
@@ -537,6 +569,58 @@ function BillingInner() {
                 <p className="mt-3 text-sm text-amber-700">Stripe is not configured on this environment.</p>
               ) : null}
             </Card>
+            {budget.plan === "creator" ? (
+            <Card>
+              <h2 className="font-semibold">Extra scrape units</h2>
+              <p className="text-sm text-[var(--muted)] mt-2">
+                {money(budget.scrape_pack_price_cents)} per {budget.scrape_pack_units} units/month.
+                No extra clients or reports — only scrape quota.
+              </p>
+              <div className="mt-4 flex flex-col sm:flex-row sm:items-center gap-3">
+                <select
+                  className="w-full sm:w-56 rounded-xl border border-[var(--line)] px-3 py-2 disabled:opacity-50 bg-white"
+                  value={scrapeUnits}
+                  disabled={!!busy || !canManage}
+                  onChange={(e) => setScrapeUnits(Number(e.target.value) || 0)}
+                >
+                  {(budget.catalog.scrape_pack?.options || [0, 100, 200, 500, 1000, 2000, 5000])
+                    .concat(budget.extra_scrape_units || 0)
+                    .filter((units, idx, all) => all.indexOf(units) === idx)
+                    .sort((a, b) => a - b)
+                    .map((units) => (
+                    <option key={units} value={units}>
+                      {units === 0
+                        ? "No extra units"
+                        : `${units.toLocaleString()} units · ${money((units / (budget.scrape_pack_units || 100)) * budget.scrape_pack_price_cents)}/mo`}
+                    </option>
+                  ))}
+                </select>
+                <Button
+                  onClick={() => void updateScrapes()}
+                  className="w-full sm:w-auto"
+                  disabled={
+                    !!busy
+                    || !canManage
+                    || !budget.stripe_configured
+                    || !budget.catalog.scrape_pack?.checkout_ready
+                    || scrapeUnits === (budget.extra_scrape_units || 0)
+                  }
+                >
+                  {busy === "scrapes" || busy === "checkout"
+                    ? "Working…"
+                    : !budget.has_subscription && scrapeUnits
+                      ? `Checkout ${money((scrapeUnits / (budget.scrape_pack_units || 100)) * budget.scrape_pack_price_cents)}/month extra`
+                      : scrapeUnits
+                        ? `Pay ${money((scrapeUnits / (budget.scrape_pack_units || 100)) * budget.scrape_pack_price_cents)}/month`
+                        : "Remove extra units"}
+                </Button>
+              </div>
+              <p className="text-xs text-[var(--muted)] mt-3">
+                Current extra: {(budget.extra_scrape_units || 0).toLocaleString()} · scrapes {budget.scrape_units_used}/
+                {budget.scrape_quota}
+              </p>
+            </Card>
+            ) : (
             <Card>
               <h2 className="font-semibold">
                 Per-client add-on packs
@@ -571,7 +655,9 @@ function BillingInner() {
                 {budget.reports_quota}, scrapes {budget.scrape_units_used}/{budget.scrape_quota}
               </p>
             </Card>
+            )}
           </div>
+          {budget.plan !== "creator" ? (
           <Card className="mt-4">
             <h2 className="font-semibold">Extra scrape units</h2>
             <p className="text-sm text-[var(--muted)] mt-2">
@@ -616,6 +702,7 @@ function BillingInner() {
               {budget.scrape_quota}
             </p>
           </Card>
+          ) : null}
           </>
           ) : null}
           {budget.byok_discount_percent ? (
