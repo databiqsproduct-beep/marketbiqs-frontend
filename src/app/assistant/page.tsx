@@ -60,7 +60,7 @@ export default function AssistantPage() {
         subtitle="ChatGPT-style briefings with streaming answers — pick a client and ask what’s changing."
       />
       {!clients.length ? (
-        <Card className="max-w-4xl py-8 text-center">
+        <Card className="py-8 text-center">
           <h2 className="font-semibold">No clients yet</h2>
           <p className="mx-auto mt-2 max-w-md text-sm text-[var(--muted)]">
             Add a client first, then come back here to ask about rivals, gaps, and reports.
@@ -71,7 +71,7 @@ export default function AssistantPage() {
         </Card>
       ) : (
         <>
-          <Card className="mb-4 max-w-4xl">
+          <Card className="mb-4">
             <label className="text-xs uppercase tracking-wide text-[var(--muted)]">Client workspace</label>
             <select
               className="mt-2 w-full rounded-xl border border-[var(--line)] bg-white px-3 py-2.5 text-sm"
@@ -87,7 +87,7 @@ export default function AssistantPage() {
             </select>
           </Card>
           {error ? <p className="mb-4 text-red-600">{error}</p> : null}
-          <Card className="max-w-4xl">
+          <Card>
             {clientId ? (
               loadingChat ? (
                 <p className="text-sm text-[var(--muted)]">Loading chat…</p>

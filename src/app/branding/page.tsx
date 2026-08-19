@@ -86,7 +86,7 @@ export default function BrandingPage() {
       />
       {error ? <p className="text-red-600 mb-4">{error}</p> : null}
       {message ? <p className="text-[var(--accent)] mb-4">{message}</p> : null}
-      <Card className="max-w-2xl">
+      <Card className="w-full">
         <form onSubmit={onSave} className="space-y-4">
           <div>
             <Label>{isIndividual ? "Your preferred name on reports" : "Agency name"}</Label>

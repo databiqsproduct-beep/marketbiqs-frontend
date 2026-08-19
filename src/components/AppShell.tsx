@@ -275,8 +275,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
       ) : null}
 
-      <main className="flex-1 min-w-0 overflow-x-hidden">
-        <div className="mx-auto w-full max-w-6xl px-4 py-5 sm:px-6 sm:py-8">{children}</div>
+      <main className="flex-1 min-w-0 w-full overflow-x-hidden">
+        <div className="box-border w-full max-w-full px-4 py-5 sm:px-6 sm:py-8">{children}</div>
       </main>
     </div>
   );

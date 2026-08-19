@@ -156,7 +156,7 @@ export default function DeliveryPage() {
       {status ? <p className="text-[var(--accent)] mb-4">{status}</p> : null}
 
       {!clients.length ? (
-        <Card className="max-w-3xl py-8 text-center">
+        <Card className="py-8 text-center">
           <h2 className="font-semibold">No clients yet</h2>
           <p className="mx-auto mt-2 max-w-md text-sm text-[var(--muted)]">
             Add a client first, then set delivery emails or WhatsApp here.
@@ -166,7 +166,7 @@ export default function DeliveryPage() {
           </Link>
         </Card>
       ) : (
-        <div className="space-y-4 max-w-3xl">
+        <div className="w-full space-y-4">
           <Card>
             <Label>Client</Label>
             <select
