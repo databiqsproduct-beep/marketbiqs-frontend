@@ -18,6 +18,8 @@ type IntelSetupDialogProps = {
   clientName?: string;
   defaultCountry?: string;
   existingCompetitorCount?: number;
+  /** Individual stored-rival cap. Agency omits this (10 per run only). */
+  maxTrackedRivals?: number | null;
   busy?: boolean;
   onCancel: () => void;
   onConfirm: (options: IntelSetupOptions) => void;
@@ -41,16 +43,27 @@ export function IntelSetupDialog({
   clientName,
   defaultCountry = "",
   existingCompetitorCount = 0,
+  maxTrackedRivals = null,
   busy = false,
   onCancel,
   onConfirm,
 }: IntelSetupDialogProps) {
   const hasExisting = existingCompetitorCount > 0;
+  const storedCap = maxTrackedRivals && maxTrackedRivals > 0 ? maxTrackedRivals : null;
+  const addRoom = storedCap == null ? 10 : Math.max(0, storedCap - existingCompetitorCount);
+  const canAddMore = storedCap == null || addRoom > 0;
   const [scope, setScope] = useState<"global" | "local">("local");
   const [country, setCountry] = useState(defaultCountry);
   const [count, setCount] = useState(5);
   const [mode, setMode] = useState<CompetitorRunMode>(hasExisting ? "update" : "add");
   const [error, setError] = useState("");
+
+  const sliderMax =
+    mode === "add"
+      ? Math.max(1, Math.min(10, storedCap == null ? 10 : Math.max(1, addRoom)))
+      : mode === "replace"
+        ? Math.max(1, Math.min(10, storedCap ?? 10))
+        : Math.max(1, Math.min(10, existingCompetitorCount || 1, storedCap ?? 10));
 
   useEffect(() => {
     if (!open) return;
@@ -58,6 +71,10 @@ export function IntelSetupDialog({
     setMode(hasExisting ? "update" : "add");
     setError("");
   }, [open, defaultCountry, hasExisting]);
+
+  useEffect(() => {
+    if (count > sliderMax) setCount(sliderMax);
+  }, [count, sliderMax]);
 
   const title = useMemo(
     () => (clientName ? `Run intel for ${clientName}` : "Run intelligence"),
@@ -75,11 +92,13 @@ export function IntelSetupDialog({
 
   const modeHelp =
     mode === "add"
-      ? `We’ll search for exactly ${count} new competitor${count === 1 ? "" : "s"}${
+      ? storedCap && !canAddMore
+        ? `Individual plans track up to ${storedCap} competitors. Remove one before adding more.`
+        : `We’ll search for exactly ${count} new competitor${count === 1 ? "" : "s"}${
           hasExisting ? " and keep your previous list." : "."
-        }`
+        }${storedCap ? ` Cap: ${existingCompetitorCount}/${storedCap} tracked.` : ""}`
       : mode === "replace"
-        ? `We’ll clear auto-found rivals${hasExisting ? ` (you have ${existingCompetitorCount})` : ""} and find exactly ${count} new one${count === 1 ? "" : "s"}. Manually pinned competitors stay.`
+        ? `We’ll clear auto-found rivals${hasExisting ? ` (you have ${existingCompetitorCount})` : ""} and find exactly ${count} new one${count === 1 ? "" : "s"}. Manually pinned competitors stay.${storedCap ? ` Max ${storedCap} tracked on Individual.` : ""}`
         : `We’ll refresh up to ${count} of your current rivals (no new names added).`;
 
   const submitLabel =
@@ -99,6 +118,10 @@ export function IntelSetupDialog({
     }
     if (mode === "update" && !hasExisting) {
       setError("No competitors to update yet. Choose “Add new” or “Replace all” first.");
+      return;
+    }
+    if (storedCap && mode === "add" && existingCompetitorCount + count > storedCap) {
+      setError(`Individual plans track up to ${storedCap} competitors (${existingCompetitorCount} already listed).`);
       return;
     }
     onConfirm({
@@ -139,7 +162,7 @@ export function IntelSetupDialog({
               <option value="update" disabled={!hasExisting}>
                 Update current — refresh rivals you already have
               </option>
-              <option value="add">
+              <option value="add" disabled={!canAddMore}>
                 {hasExisting
                   ? `Add new — find more and keep your ${existingCompetitorCount} current`
                   : "Add new — discover competitors from scratch"}
@@ -207,15 +230,16 @@ export function IntelSetupDialog({
             <input
               type="range"
               min={1}
-              max={10}
+              max={sliderMax}
               step={1}
-              value={count}
+              value={Math.min(count, sliderMax)}
               onChange={(e) => setCount(Number(e.target.value))}
               className="w-full accent-[var(--accent)]"
+              disabled={busy || (mode === "add" && !canAddMore)}
             />
             <div className="mt-1 flex justify-between text-[11px] text-[var(--muted)]">
               <span>1</span>
-              <span>10</span>
+              <span>{sliderMax}</span>
             </div>
           </div>
 

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { publicSiteOrigin } from "@/lib/site-url";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 
 /**
@@ -6,7 +7,8 @@ import { createSupabaseServerClient } from "@/lib/supabase-server";
  * Exchange must run on the server so the PKCE verifier cookie is readable.
  */
 export async function GET(request: Request) {
-  const { searchParams, origin } = new URL(request.url);
+  const { searchParams } = new URL(request.url);
+  const origin = publicSiteOrigin(request);
   const code = searchParams.get("code");
   const oauthError = searchParams.get("error_description") || searchParams.get("error");
 

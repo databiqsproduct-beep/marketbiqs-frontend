@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Radar, Search } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
@@ -8,6 +9,8 @@ import { IntelProgressOverlay, IntelRunPhase, useIntelProgress } from "@/compone
 import { IntelSetupDialog, IntelSetupOptions } from "@/components/IntelSetupDialog";
 import { Button, Card, Input, Label, PageHeader } from "@/components/ui";
 import { ApiRequestError, api, runClientIntel } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
+import { individualBrandHref, isIndividualWorkspace, pickIndividualBrand } from "@/lib/workspace";
 
 type Client = {
   id: string;
@@ -27,6 +30,9 @@ type Client = {
 type StatusFilter = "active" | "archived" | "all";
 
 export default function ClientsPage() {
+  const router = useRouter();
+  const { agency } = useAuth();
+  const individual = isIndividualWorkspace(agency);
   const [clients, setClients] = useState<Client[]>([]);
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -68,6 +74,12 @@ export default function ClientsPage() {
   useEffect(() => {
     void load();
   }, []);
+
+  useEffect(() => {
+    if (!individual || loading) return;
+    const brand = pickIndividualBrand(clients);
+    if (brand) router.replace(individualBrandHref(brand.id));
+  }, [individual, loading, clients, router]);
 
   const filtered = useMemo(() => {
     let rows = clients;
@@ -240,6 +252,8 @@ export default function ClientsPage() {
   }
 
   const isBusy = busy || !!busyId;
+  const individualBrand = pickIndividualBrand(clients);
+  const individualRedirecting = individual && (loading || !!individualBrand);
 
   return (
     <AppShell>
@@ -267,13 +281,23 @@ export default function ClientsPage() {
         errorMessage={intelError}
         onDismiss={() => setIntelOpen(false)}
       />
-      <PageHeader
-        title="Clients"
-        subtitle="Add a brand, open its workspace, or check competitors from here — no separate tracker needed."
-        actions={
-          <Button onClick={() => setOpen((v) => !v)}>{open ? "Close form" : "Add client"}</Button>
-        }
-      />
+      {individualRedirecting ? (
+        <p className="text-sm text-[var(--muted)]">Opening your competitors…</p>
+      ) : (
+        <PageHeader
+          title={individual ? "Your brand" : "Clients"}
+          subtitle={
+            individual
+              ? "Set up the brand you want to track, then we’ll take you to your competitors."
+              : "Add a brand, open its workspace, or check competitors from here — no separate tracker needed."
+          }
+          actions={
+            individual ? null : (
+              <Button onClick={() => setOpen((v) => !v)}>{open ? "Close form" : "Add client"}</Button>
+            )
+          }
+        />
+      )}
       {error ? (
         <p className="mb-4 text-red-600">
           {error}{" "}
@@ -286,12 +310,12 @@ export default function ClientsPage() {
       ) : null}
       {message ? <p className="mb-4 text-[var(--accent)]">{message}</p> : null}
 
-      {open ? (
+      {open || (individual && !individualRedirecting) ? (
         <Card className="mb-6">
-          <h2 className="mb-4 font-semibold">New client</h2>
+          <h2 className="mb-4 font-semibold">{individual ? "Your brand" : "New client"}</h2>
           <form onSubmit={onCreate} className="max-w-2xl space-y-4">
             <div>
-              <Label>Client name</Label>
+              <Label>{individual ? "Brand name" : "Client name"}</Label>
               <Input
                 value={form.name}
                 onChange={(e) => setForm({ ...form, name: e.target.value })}
@@ -332,6 +356,7 @@ export default function ClientsPage() {
         </Card>
       ) : null}
 
+      {individual ? null : (
       <Card className="overflow-hidden p-0">
         <div className="flex flex-col gap-3 border-b border-[var(--line)] px-4 py-4 sm:px-5 sm:flex-row sm:items-center sm:justify-between">
           <div className="min-w-0">
@@ -481,6 +506,7 @@ export default function ClientsPage() {
           ) : null}
         </div>
       </Card>
+      )}
     </AppShell>
   );
 }

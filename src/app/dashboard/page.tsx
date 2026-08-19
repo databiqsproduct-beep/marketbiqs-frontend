@@ -2,6 +2,7 @@
 
 import { FormEvent, Fragment, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   ArrowDown,
   ArrowUp,
@@ -18,6 +19,8 @@ import { AppShell } from "@/components/AppShell";
 import { RivalPulseBar } from "@/components/Charts";
 import { Button, Card, Input, PageHeader } from "@/components/ui";
 import { api, streamHelpdeskChat } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
+import { individualBrandHref, isIndividualWorkspace, pickIndividualBrand } from "@/lib/workspace";
 
 type PortfolioRow = {
   id: string;
@@ -607,6 +610,9 @@ function DashboardHelp() {
 }
 
 export default function DashboardPage() {
+  const router = useRouter();
+  const { agency } = useAuth();
+  const individual = isIndividualWorkspace(agency);
   const [data, setData] = useState<Dashboard | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -818,6 +824,24 @@ export default function DashboardPage() {
   }
 
   useEffect(() => {
+    if (!individual) return;
+    let cancelled = false;
+    api<{ id: string; is_active?: boolean }[]>("/api/clients?include_inactive=true")
+      .then((list) => {
+        if (cancelled) return;
+        const brand = pickIndividualBrand(list);
+        router.replace(brand ? individualBrandHref(brand.id) : "/clients");
+      })
+      .catch(() => {
+        if (!cancelled) router.replace("/clients");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [individual, router]);
+
+  useEffect(() => {
+    if (individual) return;
     load().catch(() => {
       /* error already set */
     });
@@ -1017,6 +1041,14 @@ export default function DashboardPage() {
           ? "border-dashed bg-black/[0.01]"
           : "";
     return `rounded-xl border border-[var(--line)] p-3.5 transition-colors ${tint}`;
+  }
+
+  if (individual) {
+    return (
+      <AppShell>
+        <p className="text-sm text-[var(--muted)]">Opening your competitors…</p>
+      </AppShell>
+    );
   }
 
   return (

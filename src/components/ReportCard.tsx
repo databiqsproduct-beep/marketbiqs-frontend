@@ -2,9 +2,9 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ChevronDown, FileText } from "lucide-react";
+import { ChevronDown, FileText, Trash2 } from "lucide-react";
 import { Button, Card } from "@/components/ui";
-import { downloadReportPdf } from "@/lib/api";
+import { api, downloadReportPdf } from "@/lib/api";
 
 export type ReportSection = {
   heading?: string;
@@ -39,26 +39,42 @@ export function ReportCard({
   showClientLink = false,
   defaultExpanded = false,
   onError,
+  onDeleted,
 }: {
   report: ReportLike;
   showClientLink?: boolean;
   defaultExpanded?: boolean;
   onError?: (message: string) => void;
+  onDeleted?: (reportId: string) => void;
 }) {
   const sections = Array.isArray(report.sections) ? report.sections : [];
   const hasSections = sections.length > 0;
   const [expanded, setExpanded] = useState(defaultExpanded || !hasSections);
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState<"pdf" | "delete" | "">("");
   const title = report.title || "Untitled report";
 
   async function onDownload() {
-    setBusy(true);
+    setBusy("pdf");
     try {
       await downloadReportPdf(report.id, `${title}.pdf`);
     } catch (err) {
       onError?.(err instanceof Error ? err.message : "Could not download PDF");
     } finally {
-      setBusy(false);
+      setBusy("");
+    }
+  }
+
+  async function onDelete() {
+    const ok = window.confirm(`Delete “${title}”? This cannot be undone.`);
+    if (!ok) return;
+    setBusy("delete");
+    try {
+      await api(`/api/reports/${report.id}`, { method: "DELETE" });
+      onDeleted?.(report.id);
+    } catch (err) {
+      onError?.(err instanceof Error ? err.message : "Could not delete report");
+    } finally {
+      setBusy("");
     }
   }
 
@@ -88,18 +104,19 @@ export function ReportCard({
           <Button
             variant="ghost"
             className="flex-1 sm:flex-none"
-            disabled={busy}
+            disabled={!!busy}
             onClick={() => void onDownload()}
           >
             <span className="inline-flex items-center gap-1.5">
               <FileText size={14} />
-              {busy ? "Downloading…" : "Download PDF"}
+              {busy === "pdf" ? "Downloading…" : "Download PDF"}
             </span>
           </Button>
           {hasSections ? (
             <Button
               variant={expanded ? "ghost" : "primary"}
               className="flex-1 sm:flex-none"
+              disabled={!!busy}
               onClick={() => setExpanded((v) => !v)}
               aria-expanded={expanded}
             >
@@ -109,6 +126,17 @@ export function ReportCard({
               </span>
             </Button>
           ) : null}
+          <Button
+            variant="ghost"
+            className="flex-1 sm:flex-none !border-red-200 !text-red-700 hover:!bg-red-50"
+            disabled={!!busy}
+            onClick={() => void onDelete()}
+          >
+            <span className="inline-flex items-center gap-1.5">
+              <Trash2 size={14} />
+              {busy === "delete" ? "Deleting…" : "Delete"}
+            </span>
+          </Button>
         </div>
       </div>
 

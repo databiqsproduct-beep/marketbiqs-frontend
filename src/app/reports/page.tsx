@@ -184,6 +184,7 @@ export default function ReportsPage() {
               report={r}
               showClientLink
               onError={(msg) => setError(msg)}
+              onDeleted={(id) => setReports((prev) => prev.filter((row) => row.id !== id))}
             />
           ))}
           {reports.length === 0 ? (
