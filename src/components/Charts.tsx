@@ -1,4 +1,4 @@
-"use client";
+"useclient";
 
 type Point = { label: string; value: number };
 type ActivityPoint = {
