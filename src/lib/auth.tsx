@@ -131,6 +131,9 @@ function authErrorMessage(err: unknown, fallback: string): string {
     if (/rate limit|over_email_send_rate_limit|over_request_rate_limit|too many requests/i.test(msg)) {
       return "Too many signup attempts. Wait about an hour (Supabase free email limit is ~2/hour), then try once — or sign in if you already registered.";
     }
+    if (/PKCE code verifier not found/i.test(msg)) {
+      return "Google sign-in could not finish. Close other MarketBiqs tabs, open http://localhost:3000/login, then try Continue with Google once. Or use email/password.";
+    }
     if (/redirect|not allowed|whitelist|allow list|allowlist/i.test(msg)) {
       return "Auth redirect URL is not allowed. Add this site’s /auth/callback URL in Supabase → Authentication → URL Configuration.";
     }
@@ -311,13 +314,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const loginWithGoogle = useCallback(async () => {
     const sb = requireSupabase();
-    const { error } = await sb.auth.signInWithOAuth({
+    const redirectTo = `${siteUrl()}/auth/callback`;
+    const { data, error } = await sb.auth.signInWithOAuth({
       provider: "google",
       options: {
-        redirectTo: `${siteUrl()}/auth/callback`,
+        redirectTo,
+        // Let us persist flowId before navigating — avoids PKCE miss after redirect.
+        skipBrowserRedirect: true,
       },
     });
     if (error) throw new Error(authErrorMessage(error, "Google sign-in failed"));
+    if (!data?.url) throw new Error("Google sign-in did not return a redirect URL.");
+
+    try {
+      if (data.flowId) {
+        sessionStorage.setItem("biqs_oauth_flow_id", data.flowId);
+      } else {
+        sessionStorage.removeItem("biqs_oauth_flow_id");
+      }
+    } catch {
+      /* private mode / blocked storage */
+    }
+
+    window.location.assign(data.url);
   }, []);
 
   const logout = useCallback(async () => {

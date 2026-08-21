@@ -58,6 +58,23 @@ export default function WhiteLabelPage() {
             </div>
           ) : null}
           <div className="mt-6 text-sm text-[var(--muted)] space-y-2">
+            <div>
+              <a
+                href="/white-label/embed-preview"
+                className="text-[var(--accent)] underline-offset-2 hover:underline"
+              >
+                See embed preview
+              </a>{" "}
+              — what a company sees when your key powers their webpage
+            </div>
+            <div>
+              <a href="/white-label/tester" className="text-[var(--accent)] underline-offset-2 hover:underline">
+                Raw API tester
+              </a>{" "}
+              — JSON responses for developers
+            </div>
+            <div>GET /api/v1/clients</div>
+            <div>GET /api/v1/intelligence/&#123;client_id&#125;/snapshot</div>
             <div>GET /api/v1/intelligence/&#123;client_id&#125;/trends</div>
             <div>POST /api/v1/intelligence/&#123;client_id&#125;/run</div>
             <div>POST /api/v1/intelligence/&#123;client_id&#125;/report</div>

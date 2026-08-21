@@ -95,7 +95,7 @@ const TAB_HELP: Record<Tab, string> = {
     "Add or pick a rival, then see the scoreboard and a feature-by-feature comparison for that company.",
   alerts: "Things competitors offer that this brand still doesn’t. Clear these as you act on them.",
   wishlist: "Ideas you saved to build later. Turn any item into a simple step-by-step plan (and send to Jira if connected).",
-  reports: "Written summaries after each competitor check. One can run automatically every day, or you can start one anytime.",
+  reports: "Written summaries you opt into when running intel, or create anytime from this tab. Each report uses one credit.",
   radar:
     "What’s hot in this market right now: trending topics, how people talk about the space, and saved web pages.",
 };
@@ -392,22 +392,29 @@ function ClientDetailPageInner() {
         options.competitor_mode === "update"
           ? options.competitor_count
           : tracked || added || options.competitor_count;
+      const reportBit = options.generate_report ? " · report ready" : " · intel only (no report credit used)";
       const summary =
         options.competitor_mode === "update"
-          ? `Competitor refresh done · ${shown} rival${shown === 1 ? "" : "s"} updated · report ready.`
+          ? `Competitor refresh done · ${shown} rival${shown === 1 ? "" : "s"} updated${reportBit}.`
           : options.competitor_mode === "replace"
-            ? `Fresh competitor set ready · ${shown} rival${shown === 1 ? "" : "s"} tracked · report ready.`
-            : `Competitor check done · ${added || shown} new rival${(added || shown) === 1 ? "" : "s"} considered · ${tracked || shown} tracked · report ready.`;
+            ? `Fresh competitor set ready · ${shown} rival${shown === 1 ? "" : "s"} tracked${reportBit}.`
+            : `Competitor check done · ${added || shown} new rival${(added || shown) === 1 ? "" : "s"} considered · ${tracked || shown} tracked${reportBit}.`;
       setMessage(summary);
       setIntelSuccess(summary);
       setIntelPhase("success");
       await loadAll();
-      setTab("reports");
+      setTab(options.generate_report ? "reports" : "competitors");
     } catch (err) {
       const detail = err instanceof Error ? err.message : "Intel run failed";
       setError(detail);
       setIntelError(detail);
       setIntelPhase("error");
+      // Job often finishes after the UI gives up — refresh so new rivals appear.
+      try {
+        await loadAll();
+      } catch {
+        /* ignore refresh errors */
+      }
     } finally {
       setBusy("");
     }
@@ -921,8 +928,8 @@ function ClientDetailPageInner() {
                 </p>
               ) : (
                 <p className="mt-3 text-sm text-[var(--muted)]">
-                  No report yet. Click <strong className="font-medium text-[var(--ink)]">Check competitors</strong> above
-                  to create the first one.
+                  No report yet. Run <strong className="font-medium text-[var(--ink)]">Check competitors</strong> and
+                  tick “Also generate a client report”, or use <strong className="font-medium text-[var(--ink)]">Write weekly summary</strong> on the Reports tab.
                 </p>
               )}
             </Card>
@@ -1496,12 +1503,12 @@ function ClientDetailPageInner() {
             <Card>
               <h2 className="font-semibold mb-1">Client-ready reports</h2>
               <p className="text-sm text-[var(--muted)] mb-3 leading-relaxed">
-                After each competitor check we save a written summary you can share. One can also run automatically about
-                once a day — or start a fresh one anytime.
+                Reports are optional and use one credit each. Tick “Also generate a client report” when you run intel, or
+                write a weekly summary here anytime.
               </p>
               <div className="flex flex-wrap gap-2">
                 <Button onClick={runIntel} disabled={!!busy}>
-                  {busy === "pack" ? "Working…" : "Check competitors & make a report"}
+                  {busy === "pack" ? "Working…" : "Check competitors"}
                 </Button>
                 <Button variant="ghost" onClick={() => void generateWeeklyBrief()} disabled={!!busy}>
                   {busy === "brief" ? "Writing…" : "Write weekly summary"}

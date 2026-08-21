@@ -21,6 +21,7 @@ import {
   Workflow,
   X,
 } from "lucide-react";
+import { WorkspaceHelp } from "@/components/WorkspaceHelp";
 import { useAuth } from "@/lib/auth";
 import { isIndividualWorkspace } from "@/lib/workspace";
 import clsx from "clsx";
@@ -276,8 +277,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       ) : null}
 
       <main className="flex-1 min-w-0 w-full overflow-x-hidden">
-        <div className="box-border w-full max-w-full px-4 py-5 sm:px-6 sm:py-8">{children}</div>
+        <div className="page-bottom-pad box-border w-full max-w-full px-4 py-5 sm:px-6 sm:py-8">{children}</div>
       </main>
+      <WorkspaceHelp />
     </div>
   );
 }
