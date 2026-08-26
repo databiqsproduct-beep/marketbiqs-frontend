@@ -58,6 +58,7 @@ export default function WhiteLabelPage() {
             </div>
           ) : null}
           <div className="mt-6 text-sm text-[var(--muted)] space-y-2">
+            <div>GET /api/v1/clients</div>
             <div>GET /api/v1/intelligence/&#123;client_id&#125;/trends</div>
             <div>POST /api/v1/intelligence/&#123;client_id&#125;/run</div>
             <div>POST /api/v1/intelligence/&#123;client_id&#125;/report</div>

@@ -82,7 +82,7 @@ export default function ByokPage() {
     <AppShell>
       <PageHeader
         title="Bring your own API keys"
-        subtitle="Lower subscription cost by plugging in your own Groq, Apify, SerpAPI, or Firecrawl keys."
+        subtitle="Optional. MarketBiqs already uses platform keys by default. Add your own Groq, Apify, SerpAPI, or Firecrawl key only if you want BYOK billing discount."
       />
       {error ? <p className="text-red-600 mb-4">{error}</p> : null}
       {message ? <p className="text-[var(--accent)] mb-4">{message}</p> : null}

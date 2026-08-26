@@ -19,8 +19,16 @@ function LoginForm() {
 
   useEffect(() => {
     const fromQuery = searchParams.get("error");
-    if (fromQuery) setError(fromQuery);
-  }, [searchParams]);
+    if (!fromQuery) return;
+    if (/PKCE code verifier not found|login code expired|different tab/i.test(fromQuery)) {
+      setError(
+        "Google sign-in could not finish. Close other MarketBiqs tabs, open http://localhost:3000/login, then try Continue with Google once. Or use email/password below.",
+      );
+    } else {
+      setError(fromQuery);
+    }
+    router.replace("/login", { scroll: false });
+  }, [searchParams, router]);
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();

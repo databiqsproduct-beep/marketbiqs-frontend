@@ -137,6 +137,7 @@ export async function runClientIntel(
     competitor_country?: string;
     competitor_count: number;
     competitor_mode?: "update" | "add" | "replace";
+    generate_report?: boolean;
   },
 ): Promise<IntelJob> {
   const started = await api<{ job_id: string; status: string }>(`/api/clients/${clientId}/auto-run`, {
@@ -146,22 +147,59 @@ export async function runClientIntel(
       competitor_country: options.competitor_country || null,
       competitor_count: options.competitor_count,
       competitor_mode: options.competitor_mode || "add",
+      generate_report: Boolean(options.generate_report),
     }),
   });
   if (!started?.job_id) {
     throw new Error("Intel did not return a job id");
   }
-  const deadline = Date.now() + 5 * 60 * 1000;
+
+  const pollOnce = () =>
+    api<IntelJob>(`/api/clients/${clientId}/jobs/${started.job_id}`, { timeoutMs: 20_000 });
+  const deadline = Date.now() + 12 * 60 * 1000; // enrich+pack+report often 6–10 min when Serp/Groq are slow
+
+  let consecutivePollFailures = 0;
   while (Date.now() < deadline) {
     await new Promise((resolve) => setTimeout(resolve, 2500));
-    const job = await api<IntelJob>(`/api/clients/${clientId}/jobs/${started.job_id}`);
-    const status = String(job.status || "").toLowerCase();
-    if (status === "completed") return job;
-    if (status === "failed") {
-      throw new Error(job.detail || "Intel run failed");
+    try {
+      const job = await pollOnce();
+      consecutivePollFailures = 0;
+      const status = String(job.status || "").toLowerCase();
+      if (status === "completed") return job;
+      if (status === "failed") {
+        throw new Error(job.detail || "Intel run failed");
+      }
+    } catch (err) {
+      consecutivePollFailures += 1;
+      const msg = err instanceof Error ? err.message : String(err);
+      // Transient API blip / busy DB — keep polling unless it persists
+      if (
+        consecutivePollFailures >= 6 ||
+        (!/timed out|timeout|reach the API|Server busy|503/i.test(msg) &&
+          !(err instanceof ApiRequestError && err.status >= 500))
+      ) {
+        throw err instanceof Error ? err : new Error(msg);
+      }
     }
   }
-  throw new Error("Intel is still running after 5 minutes. Refresh and check Radar → jobs.");
+
+  // Race: job may finish right after the poll loop ends
+  try {
+    const late = await pollOnce();
+    const status = String(late.status || "").toLowerCase();
+    if (status === "completed") return late;
+    if (status === "failed") {
+      throw new Error(late.detail || "Intel run failed");
+    }
+  } catch (err) {
+    if (err instanceof Error && !/still running/i.test(err.message)) {
+      throw err;
+    }
+  }
+
+  throw new Error(
+    "Intel is taking longer than usual (Serp/AI may be slow). Close this, refresh the page — the run often finishes in the background.",
+  );
 }
 
 /** @deprecated Prefer downloadReportPdf — query-token PDF auth is not supported. */
