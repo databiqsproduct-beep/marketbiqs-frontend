@@ -311,9 +311,9 @@ export default function ClientsPage() {
       {message ? <p className="mb-4 text-[var(--accent)]">{message}</p> : null}
 
       {open || (individual && !individualRedirecting) ? (
-        <Card className="mb-6">
+        <Card className="mb-6 w-full">
           <h2 className="mb-4 font-semibold">{individual ? "Your brand" : "New client"}</h2>
-          <form onSubmit={onCreate} className="max-w-2xl space-y-4">
+          <form onSubmit={onCreate} className="w-full space-y-4">
             <div>
               <Label>{individual ? "Brand name" : "Client name"}</Label>
               <Input
@@ -357,7 +357,7 @@ export default function ClientsPage() {
       ) : null}
 
       {individual ? null : (
-      <Card className="overflow-hidden p-0">
+      <Card className="w-full overflow-hidden p-0">
         <div className="flex flex-col gap-3 border-b border-[var(--line)] px-4 py-4 sm:px-5 sm:flex-row sm:items-center sm:justify-between">
           <div className="min-w-0">
             <div className="font-semibold">

@@ -50,7 +50,6 @@ export function clearSession() {
  * starts a background job and polls (Next/Railway proxies often time out around 30–60s).
  */
 function apiBase() {
-  if (typeof window !== "undefined") return "";
   return API_URL;
 }
 

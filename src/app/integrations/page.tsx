@@ -27,6 +27,9 @@ export default function IntegrationsPage() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [form, setForm] = useState(emptyForm);
+  const [showUpdate, setShowUpdate] = useState(false);
+
+  const connected = Boolean(status?.connected);
 
   const load = useCallback(async () => {
     const res = await api<JiraStatus>("/api/integrations/jira");
@@ -79,11 +82,8 @@ export default function IntegrationsPage() {
         base_url,
         email,
       });
-      setMessage(
-        status?.connected
-          ? "Jira connection updated for your agency."
-          : "Jira connected for your agency. Each client ticket uses your credentials.",
-      );
+      setMessage(connected ? "Jira connection updated." : "Jira is connected. Client tickets will use this workspace.");
+      setShowUpdate(false);
       setForm((f) => ({ ...f, base_url, email, project_key, api_token: "" }));
       await load();
     } catch (err) {
@@ -94,7 +94,7 @@ export default function IntegrationsPage() {
   }
 
   async function onDisconnect() {
-    if (!window.confirm("Disconnect Jira for this agency? Existing pushed tickets stay in Jira.")) return;
+    if (!window.confirm("Disconnect Jira for this workspace? Tickets already in Jira stay there.")) return;
     setError("");
     setMessage("");
     setBusy("disconnect");
@@ -102,6 +102,7 @@ export default function IntegrationsPage() {
       await api("/api/integrations/jira/disconnect", { method: "POST" });
       setStatus({ connected: false });
       setForm(emptyForm);
+      setShowUpdate(false);
       setMessage("Jira disconnected.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Disconnect failed");
@@ -114,35 +115,60 @@ export default function IntegrationsPage() {
     <AppShell>
       <PageHeader
         title="Integrations"
-        subtitle="Connect your own Jira. Biqs never uses a shared platform Jira key — agencies bring their own."
+        subtitle="Connect your own Jira. Biqs never uses a shared platform key — each workspace brings its own."
       />
       {error ? <p className="text-red-600 mb-4">{error}</p> : null}
       {message ? <p className="text-[var(--accent)] mb-4">{message}</p> : null}
-      <div className="grid lg:grid-cols-2 gap-4">
-        <Card>
-          <h2 className="font-semibold mb-2">Jira status</h2>
-          {loading ? (
-            <p className="text-sm text-[var(--muted)]">Checking connection…</p>
-          ) : status?.connected ? (
-            <div className="space-y-3">
-              <div className="text-sm text-[var(--muted)] space-y-1">
-                <div className="font-medium text-[var(--accent)]">Connected</div>
-                <div>Site: {status.base_url || "—"}</div>
-                <div>Project: {status.project_key || "—"}</div>
-                <div>Email: {status.email || "—"}</div>
+
+      {loading ? (
+        <Card className="w-full">
+          <p className="text-sm text-[var(--muted)]">Checking Jira…</p>
+        </Card>
+      ) : connected && !showUpdate ? (
+        <Card className="w-full">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="font-semibold">Jira</h2>
+                <span className="rounded-full bg-[var(--accent-soft)] px-2.5 py-0.5 text-xs font-medium text-[var(--accent)]">
+                  Connected
+                </span>
               </div>
-              <Button variant="ghost" disabled={!!busy} onClick={() => void onDisconnect()}>
-                {busy === "disconnect" ? "Disconnecting…" : "Disconnect Jira"}
+              <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-3">
+                <div>
+                  <dt className="text-[11px] uppercase tracking-wide text-[var(--muted)]">Site</dt>
+                  <dd className="mt-0.5 break-all text-[var(--ink)]">{status?.base_url || "—"}</dd>
+                </div>
+                <div>
+                  <dt className="text-[11px] uppercase tracking-wide text-[var(--muted)]">Project</dt>
+                  <dd className="mt-0.5 font-medium text-[var(--ink)]">{status?.project_key || "—"}</dd>
+                </div>
+                <div>
+                  <dt className="text-[11px] uppercase tracking-wide text-[var(--muted)]">Account</dt>
+                  <dd className="mt-0.5 break-all text-[var(--ink)]">{status?.email || "—"}</dd>
+                </div>
+              </dl>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" variant="ghost" disabled={!!busy} onClick={() => setShowUpdate(true)}>
+                Update credentials
+              </Button>
+              <Button type="button" variant="danger" disabled={!!busy} onClick={() => void onDisconnect()}>
+                {busy === "disconnect" ? "Disconnecting…" : "Disconnect"}
               </Button>
             </div>
-          ) : (
-            <p className="text-sm text-[var(--muted)]">Not connected yet.</p>
-          )}
+          </div>
         </Card>
-        <Card>
-          <h2 className="font-semibold mb-4">{status?.connected ? "Update Jira connection" : "Connect your Jira"}</h2>
-          <form onSubmit={onConnect} className="space-y-3">
-            <div>
+      ) : (
+        <Card className="w-full">
+          <h2 className="font-semibold">{connected ? "Update Jira" : "Connect Jira"}</h2>
+          <p className="mt-1 text-sm text-[var(--muted)]">
+            {connected
+              ? "Paste a new API token if you need to rotate keys. Site and project can change too."
+              : "We’ll send build-list tickets to this Jira project using your token — never a shared Biqs key."}
+          </p>
+          <form onSubmit={onConnect} className="mt-5 grid gap-3 sm:grid-cols-2">
+            <div className="sm:col-span-2">
               <Label>Jira base URL</Label>
               <Input
                 placeholder="https://yourorg.atlassian.net"
@@ -170,7 +196,8 @@ export default function IntegrationsPage() {
                 onChange={(e) => setForm({ ...form, api_token: e.target.value })}
                 required
                 disabled={!!busy}
-                placeholder={status?.connected ? "Paste a new token to update" : undefined}
+                placeholder={connected ? "New token" : undefined}
+                autoComplete="off"
               />
             </div>
             <div>
@@ -183,25 +210,19 @@ export default function IntegrationsPage() {
                 disabled={!!busy}
               />
             </div>
-            <div>
-              <Label>Epic name field (optional)</Label>
-              <Input
-                placeholder="customfield_10011"
-                value={form.epic_name_field}
-                onChange={(e) => setForm({ ...form, epic_name_field: e.target.value })}
-                disabled={!!busy}
-              />
+            <div className="flex flex-wrap items-end gap-2 sm:col-span-2">
+              <Button type="submit" disabled={!!busy}>
+                {busy === "connect" ? "Saving…" : connected ? "Save update" : "Connect Jira"}
+              </Button>
+              {connected ? (
+                <Button type="button" variant="ghost" disabled={!!busy} onClick={() => setShowUpdate(false)}>
+                  Cancel
+                </Button>
+              ) : null}
             </div>
-            <Button type="submit" disabled={!!busy}>
-              {busy === "connect"
-                ? "Saving…"
-                : status?.connected
-                  ? "Update Jira connection"
-                  : "Save Jira connection"}
-            </Button>
           </form>
         </Card>
-      </div>
+      )}
     </AppShell>
   );
 }

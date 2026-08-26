@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { FormEvent, ReactNode, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useParams, useRouter, useSearchParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import { ChevronDown } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { FeatureStanceChart } from "@/components/Charts";
@@ -14,7 +14,7 @@ import { api, runClientIntel } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { isIndividualWorkspace } from "@/lib/workspace";
 
-type RadarSectionId = "trends" | "sentiment" | "snapshots" | "jobs";
+type RadarSectionId = "trends" | "sentiment" | "snapshots";
 
 function externalHref(url?: string | null): string | undefined {
   const raw = (url || "").trim();
@@ -97,7 +97,7 @@ const TAB_HELP: Record<Tab, string> = {
   wishlist: "Ideas you saved to build later. Turn any item into a simple step-by-step plan (and send to Jira if connected).",
   reports: "Written summaries after each competitor check. One can run automatically every day, or you can start one anytime.",
   radar:
-    "What’s hot in this market right now: trending topics, how people talk about the space, saved web pages, and background refresh jobs.",
+    "What’s hot in this market right now: trending topics, how people talk about the space, and saved web pages.",
 };
 
 const DEFAULT_NEXT_ACTIONS = [
@@ -171,25 +171,24 @@ function tabFromQuery(raw: string | null, fallback: Tab = "loop"): Tab {
 function ClientDetailPageInner() {
   const params = useParams<{ id: string }>();
   const searchParams = useSearchParams();
-  const router = useRouter();
   const { agency } = useAuth();
   const individual = isIndividualWorkspace(agency);
   const clientId = params.id;
   const [tab, setTabState] = useState<Tab>(() =>
-    tabFromQuery(searchParams.get("tab"), "loop"),
+    tabFromQuery(searchParams.get("tab"), individual ? "competitors" : "loop"),
   );
 
   const setTab = useCallback(
     (next: Tab) => {
       const resolved = tabFromQuery(next);
       setTabState(resolved);
-      const params = new URLSearchParams(searchParams.toString());
-      if (resolved === "loop" && !individual) params.delete("tab");
-      else params.set("tab", resolved);
-      const qs = params.toString();
-      router.replace(qs ? `/clients/${clientId}?${qs}` : `/clients/${clientId}`, { scroll: false });
+      if (typeof window === "undefined") return;
+      const url = new URL(window.location.href);
+      if (resolved === "loop" && !individual) url.searchParams.delete("tab");
+      else url.searchParams.set("tab", resolved);
+      window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
     },
-    [clientId, individual, router, searchParams],
+    [individual],
   );
   const [client, setClient] = useState<any>(null);
   const [competitors, setCompetitors] = useState<any[]>([]);
@@ -206,7 +205,6 @@ function ClientDetailPageInner() {
   const [trends, setTrends] = useState<any[]>([]);
   const [sentiment, setSentiment] = useState<any[]>([]);
   const [snapshots, setSnapshots] = useState<any[]>([]);
-  const [jobs, setJobs] = useState<any[]>([]);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState("");
@@ -223,55 +221,61 @@ function ClientDetailPageInner() {
     trends: true,
     sentiment: true,
     snapshots: false,
-    jobs: false,
   });
   const clarifyTried = useRef(false);
+  const primedRivalId = useRef("");
 
   function toggleRadar(id: RadarSectionId) {
     setRadarOpen((prev) => ({ ...prev, [id]: !prev[id] }));
   }
 
   useEffect(() => {
-    setTabState(tabFromQuery(searchParams.get("tab"), individual ? "competitors" : "loop"));
-  }, [searchParams, individual]);
-
-  useEffect(() => {
     clarifyTried.current = false;
+    primedRivalId.current = "";
   }, [clientId]);
 
-  async function loadAll() {
-    const soft = <T,>(p: Promise<T>, fallback: T) => p.catch(() => fallback);
-    const [c, comps, feats, a, r, loop, wish, tr, sent, snaps, j] = await Promise.all([
-      api<any>(`/api/clients/${clientId}`),
-      soft(api<any[]>(`/api/clients/${clientId}/competitors`), []),
-      soft(api<any[]>(`/api/clients/${clientId}/features`), []),
-      soft(api<any[]>(`/api/clients/${clientId}/alerts`), []),
-      soft(api<any[]>(`/api/clients/${clientId}/reports`), []),
-      soft(api<any>(`/api/clients/${clientId}/weekly-loop`), null),
-      soft(api<any[]>(`/api/clients/${clientId}/wishlist`), []),
-      soft(api<any[]>(`/api/clients/${clientId}/trends`), []),
-      soft(api<any[]>(`/api/clients/${clientId}/sentiment`), []),
-      soft(api<any[]>(`/api/clients/${clientId}/snapshots`), []),
-      soft(api<any[]>(`/api/clients/${clientId}/jobs`), []),
-    ]);
-    setClient(c);
-    setCompetitors(comps);
-    setFeatures(feats);
-    setAlerts(a);
-    setReports(r);
-    setWeekly(loop);
-    setWishlist(wish);
-    setTrends(Array.isArray(tr) ? tr : []);
-    setSentiment(Array.isArray(sent) ? sent : []);
-    setSnapshots(Array.isArray(snaps) ? snaps : []);
-    setJobs(Array.isArray(j) ? j : []);
+  async function applyWorkspace(snap: any) {
+    setClient(snap.client);
+    setCompetitors(Array.isArray(snap.competitors) ? snap.competitors : []);
+    setFeatures(Array.isArray(snap.features) ? snap.features : []);
+    setAlerts(Array.isArray(snap.alerts) ? snap.alerts : []);
+    setReports(Array.isArray(snap.reports) ? snap.reports : []);
+    setWeekly(snap.weekly || null);
+    setWishlist(Array.isArray(snap.wishlist) ? snap.wishlist : []);
+    setTrends(Array.isArray(snap.trends) ? snap.trends : []);
+    setSentiment(Array.isArray(snap.sentiment) ? snap.sentiment : []);
+    setSnapshots(Array.isArray(snap.snapshots) ? snap.snapshots : []);
+    setComparisons(Array.isArray(snap.comparisons) ? snap.comparisons : []);
+    setCompetitorDetail(snap.competitor_detail || null);
     setError("");
-    if (!selectedCompetitorId && comps[0]) setSelectedCompetitorId(comps[0].id);
+    const comps = Array.isArray(snap.competitors) ? snap.competitors : [];
+    const wish = Array.isArray(snap.wishlist) ? snap.wishlist : [];
+    if (comps[0]) {
+      primedRivalId.current = comps[0].id;
+      if (!selectedCompetitorId) setSelectedCompetitorId(comps[0].id);
+    }
     if (!selectedFeatureId && wish[0]) setSelectedFeatureId(wish[0].id);
   }
 
+  async function loadAll() {
+    const snap = await api<any>(`/api/clients/${clientId}/workspace`);
+    await applyWorkspace(snap);
+  }
+
   useEffect(() => {
-    loadAll().catch((err) => setError(err.message));
+    let cancelled = false;
+    (async () => {
+      try {
+        const snap = await api<any>(`/api/clients/${clientId}/workspace`);
+        if (!cancelled) await applyWorkspace(snap);
+      } catch (err) {
+        if (!cancelled) setError(err instanceof Error ? err.message : String(err));
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clientId]);
 
   useEffect(() => {
@@ -280,15 +284,17 @@ function ClientDetailPageInner() {
       setCompetitorDetail(null);
       return;
     }
+    if (primedRivalId.current === selectedCompetitorId) {
+      primedRivalId.current = "";
+      return;
+    }
     api<any[]>(`/api/clients/${clientId}/comparisons?competitor_id=${selectedCompetitorId}`)
       .then(setComparisons)
       .catch(() => setComparisons([]));
-    if (tab === "competitors") {
-      api<any>(`/api/clients/${clientId}/competitors/${selectedCompetitorId}`)
-        .then(setCompetitorDetail)
-        .catch(() => setCompetitorDetail(null));
-    }
-  }, [clientId, selectedCompetitorId, tab]);
+    api<any>(`/api/clients/${clientId}/competitors/${selectedCompetitorId}`)
+      .then(setCompetitorDetail)
+      .catch(() => setCompetitorDetail(null));
+  }, [clientId, selectedCompetitorId]);
 
   useEffect(() => {
     if (!selectedFeatureId || tab !== "wishlist") {
@@ -693,7 +699,7 @@ function ClientDetailPageInner() {
               </span>
               <div>
                 <div className="font-medium text-[var(--ink)]">Loading this client…</div>
-                <div className="text-sm text-[var(--muted)]">Pulling competitors, features, warnings, and reports…</div>
+                <div className="text-sm text-[var(--muted)]">Loading your workspace in one request…</div>
               </div>
             </div>
           </Card>
@@ -815,9 +821,9 @@ function ClientDetailPageInner() {
           ))}
         </div>
       </div>
-      <p className="text-sm text-[var(--muted)] mb-6 max-w-3xl leading-relaxed">{TAB_HELP[tab]}</p>
+      <p className="text-sm text-[var(--muted)] mb-6 w-full leading-relaxed">{TAB_HELP[tab]}</p>
 
-      <div className="space-y-4 max-w-4xl w-full">
+      <div className="w-full space-y-4">
         {tab === "loop" ? (
           <>
             <Card>
@@ -1528,7 +1534,7 @@ function ClientDetailPageInner() {
               <h2 className="font-semibold mb-1">What’s trending around this brand</h2>
               <p className="text-sm text-[var(--muted)] leading-relaxed">
                 Not a rival feature list — this is the wider market buzz. Open a section below when you need it;
-                longer lists (snapshots, background checks) stay closed so the page stays short.
+                snapshots stay closed so the page stays short.
               </p>
             </Card>
 
@@ -1624,41 +1630,6 @@ function ClientDetailPageInner() {
               {!snapshots.length ? (
                 <div className="space-y-3">
                   <p className="text-sm text-[var(--muted)]">No snapshots yet.</p>
-                  <Button onClick={runIntel} disabled={!!busy}>
-                    {busy === "pack" ? "Working…" : "Check competitors"}
-                  </Button>
-                </div>
-              ) : null}
-            </RadarCollapsible>
-
-            <RadarCollapsible
-              title="Background checks"
-              subtitle="Automated jobs that keep this client’s data fresh"
-              count={jobs.length}
-              open={radarOpen.jobs}
-              onToggle={() => toggleRadar("jobs")}
-            >
-              {jobs.map((job: any, idx: number) => (
-                <div key={job.id || idx} className="border-b border-[var(--line)] pb-3 last:border-0 last:pb-0">
-                  <div className="font-medium">{job.job_type || job.name || job.title || job.type || "Check"}</div>
-                  <div className="text-xs text-[var(--muted)] mt-1">
-                    {job.status || "status unknown"}
-                    {job.finished_at
-                      ? ` · ${new Date(job.finished_at).toLocaleString()}`
-                      : job.created_at
-                        ? ` · ${new Date(job.created_at).toLocaleString()}`
-                        : job.updated_at
-                          ? ` · ${new Date(job.updated_at).toLocaleString()}`
-                          : ""}
-                  </div>
-                  <p className="text-sm text-[var(--muted)] mt-1 leading-relaxed">
-                    {job.detail || job.summary || job.message || job.description || "—"}
-                  </p>
-                </div>
-              ))}
-              {!jobs.length ? (
-                <div className="space-y-3">
-                  <p className="text-sm text-[var(--muted)]">No background checks logged yet.</p>
                   <Button onClick={runIntel} disabled={!!busy}>
                     {busy === "pack" ? "Working…" : "Check competitors"}
                   </Button>

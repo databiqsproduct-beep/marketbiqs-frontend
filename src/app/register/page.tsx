@@ -32,10 +32,11 @@ function RegisterForm() {
     : "This is the white-label name on reports you send to clients.";
 
   useEffect(() => {
+    if (!oauthMode) return;
     if (user?.full_name && !form.full_name) {
       setForm((f) => ({ ...f, full_name: user.full_name }));
     }
-  }, [user?.full_name, form.full_name]);
+  }, [oauthMode, user?.full_name, form.full_name]);
 
   async function finishAndRoute(me: { agency?: { onboarding_completed?: boolean } | null }) {
     router.push(me.agency?.onboarding_completed ? "/dashboard" : "/onboarding");
@@ -122,12 +123,14 @@ function RegisterForm() {
           </div>
         ) : null}
 
-        <form onSubmit={onSubmit} className="mt-4 space-y-4">
+        <form onSubmit={onSubmit} className="mt-4 space-y-4" autoComplete="off">
           {!oauthMode ? (
             <>
               <div>
                 <Label>Your name</Label>
                 <Input
+                  name="register-full-name"
+                  autoComplete="off"
                   value={form.full_name}
                   onChange={(e) => setForm({ ...form, full_name: e.target.value })}
                   required
@@ -138,6 +141,8 @@ function RegisterForm() {
                 <Label>Work email</Label>
                 <Input
                   type="email"
+                  name="register-email"
+                  autoComplete="off"
                   value={form.email}
                   onChange={(e) => setForm({ ...form, email: e.target.value })}
                   required
@@ -148,6 +153,8 @@ function RegisterForm() {
                 <Label>Password</Label>
                 <Input
                   type="password"
+                  name="register-password"
+                  autoComplete="new-password"
                   value={form.password}
                   onChange={(e) => setForm({ ...form, password: e.target.value })}
                   minLength={8}
