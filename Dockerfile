@@ -8,11 +8,11 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-ARG NEXT_PUBLIC_API_URL=https://marketbiqsbackend-production.up.railway.app
+ARG NEXT_PUBLIC_API_URL=https://marketbiqs-backend-production.up.railway.app
 ARG NEXT_PUBLIC_SUPABASE_URL=
 ARG NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=
 ARG NEXT_PUBLIC_SITE_URL=https://marketbiqs-frontend-production.up.railway.app
-ARG BACKEND_URL=https://marketbiqsbackend-production.up.railway.app
+ARG BACKEND_URL=https://marketbiqs-backend-production.up.railway.app
 
 ENV NEXT_TELEMETRY_DISABLED=1 \
     NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL \
