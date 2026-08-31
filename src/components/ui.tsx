@@ -42,13 +42,13 @@ export function Button({
 }: React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: "primary" | "ghost" | "danger" }) {
   const styles =
     variant === "primary"
-      ? "bg-[var(--accent)] text-white hover:brightness-110"
+      ? "bg-[var(--accent)] text-white hover:brightness-110 shadow-sm"
       : variant === "danger"
         ? "bg-red-600 text-white hover:bg-red-500"
-        : "bg-transparent border border-[var(--line)] text-[var(--ink)] hover:bg-black/5";
+        : "bg-white border border-[var(--line)] text-black hover:bg-neutral-50 shadow-xs";
   return (
     <button
-      className={`inline-flex items-center justify-center gap-2 rounded-xl px-3.5 py-2.5 sm:px-4 text-sm font-medium transition disabled:opacity-50 touch-manipulation ${styles} ${className}`}
+      className={`inline-flex items-center justify-center gap-2 rounded-xl px-3.5 py-2.5 sm:px-4 text-sm font-semibold transition disabled:opacity-50 touch-manipulation ${styles} ${className}`}
       {...props}
     >
       {children}

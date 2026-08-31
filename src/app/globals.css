@@ -105,3 +105,24 @@ canvas {
 table {
   border-collapse: collapse;
 }
+
+/* Explicit button text contrast guarantees */
+.btn-green,
+[data-btn="green"] {
+  background-color: var(--accent) !important;
+  color: #ffffff !important;
+}
+.btn-green *,
+[data-btn="green"] * {
+  color: #ffffff !important;
+}
+
+.btn-white,
+[data-btn="white"] {
+  background-color: #ffffff !important;
+  color: #000000 !important;
+}
+.btn-white *,
+[data-btn="white"] * {
+  color: #000000 !important;
+}

@@ -76,7 +76,7 @@ export function IntelSetupDialog({
     setMode(hasExisting && canAddMore ? "add" : hasExisting ? "update" : "add");
     setGenerateReport(false);
     setError("");
-  }, [open, defaultCountry, hasExisting]);
+  }, [open, defaultCountry, hasExisting, canAddMore]);
 
   useEffect(() => {
     if (count > sliderMax) setCount(sliderMax);

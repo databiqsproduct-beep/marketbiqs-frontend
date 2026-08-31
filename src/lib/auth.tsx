@@ -234,14 +234,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const login = useCallback(
     async (email: string, password: string) => {
-      const sb = requireSupabase();
-      const { data, error } = await sb.auth.signInWithPassword({ email, password });
-      if (error) throw new Error(authErrorMessage(error, "Sign in failed"));
-      const me = await syncSession(data.session, { requireMe: true });
-      if (!me) throw new Error("Signed in, but could not load your workspace.");
-      return me;
+      // 1. Try local API auth first or as fallback
+      try {
+        const localData = await api<MeResponse & { access_token: string }>("/api/auth/login-local", {
+          method: "POST",
+          body: JSON.stringify({ email: email.trim(), password }),
+        });
+        if (localData?.access_token) {
+          setSession(localData.access_token, localData.agency?.id || null);
+          applyMe(localData);
+          setLoading(false);
+          return localData;
+        }
+      } catch {
+        // If local authentication failed with wrong password or invalid user, check Supabase
+      }
+
+      // 2. Try Supabase Auth
+      try {
+        const sb = requireSupabase();
+        const { data, error } = await sb.auth.signInWithPassword({ email, password });
+        if (error) throw new Error(authErrorMessage(error, "Sign in failed"));
+        const me = await syncSession(data.session, { requireMe: true });
+        if (!me) throw new Error("Signed in, but could not load your workspace.");
+        return me;
+      } catch (err) {
+        throw new Error(authErrorMessage(err, "Invalid email or password"));
+      }
     },
-    [syncSession],
+    [applyMe, syncSession],
   );
 
   const bootstrap = useCallback(

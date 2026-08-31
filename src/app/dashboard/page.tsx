@@ -518,7 +518,7 @@ export default function DashboardPage() {
       setTipVisible(true);
     }
     setPrefsReady(true);
-  }, []);
+  }, [individual]);
 
   useEffect(() => {
     if (!prefsReady) return;
