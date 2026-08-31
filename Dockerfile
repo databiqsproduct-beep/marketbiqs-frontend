@@ -11,7 +11,7 @@ COPY . .
 ARG NEXT_PUBLIC_API_URL=https://marketbiqsbackend-production.up.railway.app
 ARG NEXT_PUBLIC_SUPABASE_URL=
 ARG NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=
-ARG NEXT_PUBLIC_SITE_URL=https://marketbiqsfrontend-production.up.railway.app
+ARG NEXT_PUBLIC_SITE_URL=https://marketbiqs-frontend-production.up.railway.app
 ARG BACKEND_URL=https://marketbiqsbackend-production.up.railway.app
 
 ENV NEXT_TELEMETRY_DISABLED=1 \
@@ -28,8 +28,8 @@ FROM node:22-bookworm-slim AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
-ENV SITE_URL=https://marketbiqsfrontend-production.up.railway.app
-ENV NEXT_PUBLIC_SITE_URL=https://marketbiqsfrontend-production.up.railway.app
+ENV SITE_URL=https://marketbiqs-frontend-production.up.railway.app
+ENV NEXT_PUBLIC_SITE_URL=https://marketbiqs-frontend-production.up.railway.app
 COPY --from=builder /app/package.json ./package.json
 COPY --from=builder /app/package-lock.json ./package-lock.json
 COPY --from=builder /app/node_modules ./node_modules

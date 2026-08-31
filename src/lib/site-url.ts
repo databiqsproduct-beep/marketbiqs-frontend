@@ -36,5 +36,5 @@ export function publicSiteOrigin(request: Request): string {
     return `${proto}://${headerHost}`;
   }
 
-  return "https://marketbiqsfrontend-production.up.railway.app";
+  return "https://marketbiqs-frontend-production.up.railway.app";
 }
