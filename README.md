@@ -1,36 +1,64 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# MarketBiqs Frontend
 
-## Getting Started
+Next.js 15 web client for **MarketBiqs** — an AI-powered competitive intelligence and market monitoring platform designed for digital marketing agencies, consultants, and growth teams.
 
-First, run the development server:
+---
+
+## 🚀 Overview
+
+MarketBiqs enables automated competitor tracking, multi-industry benchmarking, feature parity matrices, positioning strategy insights, and executive PDF reporting for clients across global and local markets.
+
+### Key Capabilities
+- **Landing Page & Value Demo**: Modern hero overview and automated onboarding flow.
+- **Client Intelligence Workspace**:
+  - **Overview**: Executive summary, positioning strategy, and high-threat warnings.
+  - **Competitors & Matrix**: Feature parity comparison, threat level scoring, and pinned competitor management.
+  - **Market Demand & Trends**: Live search trends, keyword demand, and sentiment signals.
+  - **Strategy & Recommendations**: Actionable tactical playbooks and Jira task integration.
+  - **Reports & Delivery**: Single-click Executive PDF reports and scheduled email deliveries.
+- **Multi-Workspace Modes**: Agency workspace with multi-client support and dedicated Individual Client workspace mode.
+- **Supabase Authentication**: Secure session management, Google OAuth PKCE, and JWT verification.
+
+---
+
+## 🛠️ Tech Stack
+
+- **Framework**: [Next.js 15](https://nextjs.org/) (App Router, React 19)
+- **Styling**: TailwindCSS & Lucide React icons
+- **State & Auth**: Supabase SSR (`@supabase/ssr`, `@supabase/supabase-js`)
+- **Markdown Rendering**: `react-markdown` with `remark-gfm`
+
+---
+
+## ⚙️ Environment Configuration
+
+Create a `.env` or `.env.local` file based on `.env.example`:
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+NEXT_PUBLIC_API_URL=http://127.0.0.1:8000
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=your-supabase-publishable-key
+NEXT_PUBLIC_SITE_URL=http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+---
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## 💻 Local Development
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+1. Install dependencies:
+   ```bash
+   npm install
+   ```
 
-## Learn More
+2. Run the development server:
+   ```bash
+   npm run dev
+   ```
 
-To learn more about Next.js, take a look at the following resources:
+3. Open [http://localhost:3000](http://localhost:3000) in your browser.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+4. Build & Linting checks:
+   ```bash
+   npm run lint
+   npm run build
+   ```
