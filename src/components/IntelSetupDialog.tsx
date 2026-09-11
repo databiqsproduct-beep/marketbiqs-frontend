@@ -52,31 +52,22 @@ export function IntelSetupDialog({
 }: IntelSetupDialogProps) {
   const hasExisting = existingCompetitorCount > 0;
   const storedCap = maxTrackedRivals && maxTrackedRivals > 0 ? maxTrackedRivals : null;
-  const addRoom = storedCap == null ? 10 : Math.max(0, storedCap - existingCompetitorCount);
-  const canAddMore = storedCap == null || addRoom > 0;
   const [scope, setScope] = useState<"global" | "local">("local");
   const [country, setCountry] = useState(defaultCountry);
   const [count, setCount] = useState(5);
-  const [mode, setMode] = useState<CompetitorRunMode>(
-    hasExisting && canAddMore ? "add" : hasExisting ? "update" : "add",
-  );
+  const [mode, setMode] = useState<CompetitorRunMode>("add");
   const [generateReport, setGenerateReport] = useState(false);
   const [error, setError] = useState("");
 
-  const sliderMax =
-    mode === "add"
-      ? Math.max(1, Math.min(10, storedCap == null ? 10 : Math.max(1, addRoom)))
-      : mode === "replace"
-        ? Math.max(1, Math.min(10, storedCap ?? 10))
-        : Math.max(1, Math.min(10, existingCompetitorCount || 1, storedCap ?? 10));
+  const sliderMax = Math.max(1, Math.min(10, storedCap ?? 10));
 
   useEffect(() => {
     if (!open) return;
     setCountry(defaultCountry);
-    setMode(hasExisting && canAddMore ? "add" : hasExisting ? "update" : "add");
+    setMode(hasExisting ? "add" : "add");
     setGenerateReport(false);
     setError("");
-  }, [open, defaultCountry, hasExisting, canAddMore]);
+  }, [open, defaultCountry, hasExisting]);
 
   useEffect(() => {
     if (count > sliderMax) setCount(sliderMax);
@@ -87,30 +78,21 @@ export function IntelSetupDialog({
     [clientName],
   );
 
-  const countLabel =
-    mode === "add"
-      ? hasExisting
-        ? `New competitors to add (kept with your ${existingCompetitorCount} existing)`
-        : "Number of competitors to find"
-      : mode === "replace"
-        ? "How many fresh competitors to find"
-        : `Existing competitors to refresh (you have ${existingCompetitorCount})`;
+  const countLabel = "Number of competitors to track";
 
   const modeHelp =
     mode === "add"
-      ? storedCap && !canAddMore
-        ? `Individual plans track up to ${storedCap} competitors. Remove one before adding more.`
-        : `We’ll find ${count} new rival${count === 1 ? "" : "s"} and keep every competitor you already have — even if you switch country or Global. Only Replace clears the auto list.${storedCap ? ` Cap: ${existingCompetitorCount}/${storedCap} tracked.` : ""}`
+      ? `We’ll track exactly ${count} competitors (keeping your top existing rivals and adding new peers).${storedCap ? ` Cap: ${storedCap} tracked.` : ""}`
       : mode === "replace"
-        ? `We’ll clear auto-found rivals${hasExisting ? ` (you have ${existingCompetitorCount})` : ""} and find exactly ${count} new one${count === 1 ? "" : "s"}. Manually pinned competitors stay.${storedCap ? ` Max ${storedCap} tracked on Individual.` : ""}`
+        ? `We’ll clear auto-found rivals and find exactly ${count} fresh competitors. Manually pinned competitors stay.${storedCap ? ` Max ${storedCap} tracked.` : ""}`
         : `We’ll refresh up to ${count} of your current rivals (no new names added).`;
 
   const submitLabel =
     mode === "add"
-      ? `Add ${count} & run`
+      ? `Track ${count} & run`
       : mode === "replace"
         ? `Replace with ${count} & run`
-        : "Update & run";
+        : `Update ${count} & run`;
 
   if (!open) return null;
 
@@ -124,8 +106,8 @@ export function IntelSetupDialog({
       setError("No competitors to update yet. Choose “Add new” or “Replace all” first.");
       return;
     }
-    if (storedCap && mode === "add" && existingCompetitorCount + count > storedCap) {
-      setError(`Individual plans track up to ${storedCap} competitors (${existingCompetitorCount} already listed).`);
+    if (storedCap && count > storedCap) {
+      setError(`Individual plans track up to ${storedCap} competitors.`);
       return;
     }
     onConfirm({
@@ -138,14 +120,14 @@ export function IntelSetupDialog({
   }
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-end justify-center bg-[rgba(20,35,31,0.42)] p-4 backdrop-blur-[2px] sm:items-center">
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-[rgba(20,35,31,0.42)] p-3 sm:p-4 backdrop-blur-[2px] overflow-y-auto">
       <div
-        className="w-full max-w-md overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--panel)] shadow-[0_24px_80px_rgba(20,35,31,0.28)]"
+        className="flex max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100vh-2rem)] w-full max-w-md flex-col overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--panel)] shadow-[0_24px_80px_rgba(20,35,31,0.28)]"
         role="dialog"
         aria-modal="true"
         aria-labelledby="intel-setup-title"
       >
-        <div className="border-b border-[var(--line)] px-5 py-4">
+        <div className="shrink-0 border-b border-[var(--line)] px-5 py-3.5 sm:py-4">
           <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--muted)]">Before we scan</p>
           <h2 id="intel-setup-title" className="mt-1 font-[family-name:var(--font-display)] text-2xl text-[var(--ink)]">
             {title}
@@ -155,7 +137,7 @@ export function IntelSetupDialog({
           </p>
         </div>
 
-        <div className="space-y-5 px-5 py-4">
+        <div className="flex-1 overflow-y-auto space-y-4 sm:space-y-5 px-5 py-4 overscroll-contain">
           <div>
             <Label>What should this run do?</Label>
             <select
@@ -167,9 +149,9 @@ export function IntelSetupDialog({
               <option value="update" disabled={!hasExisting}>
                 Update current — refresh rivals you already have
               </option>
-              <option value="add" disabled={!canAddMore}>
+              <option value="add">
                 {hasExisting
-                  ? `Add new — find more, keep all ${existingCompetitorCount} current (any country/global)`
+                  ? "Keep & add — track top rivals plus new peers"
                   : "Add new — discover competitors from scratch"}
               </option>
               <option value="replace">
@@ -245,7 +227,7 @@ export function IntelSetupDialog({
               value={Math.min(count, sliderMax)}
               onChange={(e) => setCount(Number(e.target.value))}
               className="w-full accent-[var(--accent)]"
-              disabled={busy || (mode === "add" && !canAddMore)}
+              disabled={busy}
             />
             <div className="mt-1 flex justify-between text-[11px] text-[var(--muted)]">
               <span>1</span>
@@ -275,7 +257,7 @@ export function IntelSetupDialog({
           {error ? <p className="text-sm text-red-600">{error}</p> : null}
         </div>
 
-        <div className="flex gap-2 border-t border-[var(--line)] px-5 py-4">
+        <div className="shrink-0 flex gap-2 border-t border-[var(--line)] bg-[var(--panel)] px-5 py-3.5 sm:py-4">
           <Button type="button" variant="ghost" className="flex-1" onClick={onCancel} disabled={busy}>
             Cancel
           </Button>
