@@ -129,7 +129,7 @@ function authErrorMessage(err: unknown, fallback: string): string {
       return "That email is already registered. Sign in instead.";
     }
     if (/rate limit|over_email_send_rate_limit|over_request_rate_limit|too many requests/i.test(msg)) {
-      return "Too many signup attempts. Wait about an hour (Supabase free email limit is ~2/hour), then try once — or sign in if you already registered.";
+      return "Too many signup attempts. Wait about an hour (Supabase free email limit is ~2/hour), then try once, or sign in if you already registered.";
     }
     if (/PKCE code verifier not found/i.test(msg)) {
       return "Google sign-in could not finish. Close other MarketBiqs tabs, open http://localhost:3000/login, then try Continue with Google once. Or use email/password.";

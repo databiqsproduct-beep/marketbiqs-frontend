@@ -113,17 +113,17 @@ function healthBadge(health: Health) {
 const COLOR_KEY = [
   {
     color: "bg-[var(--accent)]",
-    name: "Teal — What you have",
+    name: "Teal: What you have",
     meaning: "Features this client already offers.",
   },
   {
     color: "bg-amber-700",
-    name: "Amber — What you’re missing",
+    name: "Amber: What you’re missing",
     meaning: "Things competitors have that this client does not have yet.",
   },
   {
     color: "bg-red-600",
-    name: "Red — Warnings",
+    name: "Red: Warnings",
     meaning: "Important competitor strengths this client still needs to catch up on.",
   },
 ];
@@ -477,7 +477,10 @@ export default function DashboardPage() {
     setError("");
     setMessage("");
     try {
-      await api(`/api/clients/${clientId}`, { method: "DELETE" });
+      await api(`/api/clients/${clientId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ is_active: false }),
+      });
       setMessage(`Archived ${clientName}`);
       if (expandedId === clientId) setExpandedId("");
       await load();
@@ -485,6 +488,7 @@ export default function DashboardPage() {
       setError(err instanceof Error ? err.message : "Could not archive client");
     }
   }
+
 
   useEffect(() => {
     if (!individual) return;
@@ -803,7 +807,7 @@ export default function DashboardPage() {
                       <h2 className="font-semibold text-amber-950">Needs a closer look</h2>
                       <p className="text-sm text-amber-900/70 mt-1">
                         {needsAttention.length} client{needsAttention.length === 1 ? "" : "s"} have warnings or are
-                        missing features vs competitors — start here.
+                        missing features vs competitors; start here.
                       </p>
                     </div>
                     <div className="flex flex-wrap gap-2">
@@ -826,7 +830,7 @@ export default function DashboardPage() {
                       <h2 className="font-semibold text-[var(--ink)]">You vs competitors</h2>
                       <p className="mt-1 max-w-2xl text-sm text-[var(--muted)]">
                         Each bar is one client. More teal is good (what they already have). More amber or red means
-                        competitors are ahead — open that client to see details.
+                        competitors are ahead (open that client to see details).
                       </p>
                     </div>
                   </div>
@@ -973,7 +977,7 @@ export default function DashboardPage() {
                     </ul>
                     <p className="mt-3 border-t border-[var(--line)] pt-3 text-sm text-[var(--muted)]">
                       The colored bars live in the <span className="font-medium text-[var(--ink)]">You vs competitors</span>{" "}
-                      card above — teal = what you have, amber = missing, red = warnings.
+                      card above (teal = what you have, amber = missing, red = warnings).
                     </p>
                   </details>
                 </div>
@@ -1002,13 +1006,13 @@ export default function DashboardPage() {
                         <div className="mt-3 grid grid-cols-3 gap-2 text-center">
                           <div className="rounded-lg bg-black/[0.03] px-2 py-2">
                             <div className="text-base font-semibold tabular-nums text-[var(--ink)]">
-                              {notStarted ? "—" : c.rivals}
+                              {notStarted ? "-" : c.rivals}
                             </div>
                             <div className="text-[10px] uppercase tracking-wide text-[var(--muted)]">Rivals</div>
                           </div>
                           <div className="rounded-lg bg-black/[0.03] px-2 py-2">
                             <div className="text-base font-semibold tabular-nums text-[var(--ink)]">
-                              {notStarted ? "—" : c.uniqueFeatures}
+                              {notStarted ? "-" : c.uniqueFeatures}
                             </div>
                             <div className="text-[10px] uppercase tracking-wide text-[var(--muted)]">Gaps</div>
                           </div>
@@ -1196,7 +1200,7 @@ export default function DashboardPage() {
                                 </td>
                                 <td className="px-3 py-3.5 text-center">
                                   {notStarted ? (
-                                    <span className="text-sm text-[var(--muted)]">—</span>
+                                    <span className="text-sm text-[var(--muted)]">-</span>
                                   ) : (
                                     <button
                                       type="button"
@@ -1212,7 +1216,7 @@ export default function DashboardPage() {
                                 </td>
                                 <td className="px-3 py-3.5 text-center">
                                   {notStarted ? (
-                                    <span className="text-sm text-[var(--muted)]">—</span>
+                                    <span className="text-sm text-[var(--muted)]">-</span>
                                   ) : (
                                     <button
                                       type="button"

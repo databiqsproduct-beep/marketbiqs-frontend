@@ -153,7 +153,7 @@ export function ChatPanel({
           {
             id: tempAssistantId,
             role: "assistant",
-            content: `Sorry — I couldn’t finish that reply.\n\n**What happened:** ${detail}\n\nTry again in a moment.`,
+            content: `Sorry, I couldn’t finish that reply.\n\n**What happened:** ${detail}\n\nTry again in a moment.`,
           },
         ];
       });

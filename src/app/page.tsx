@@ -211,7 +211,7 @@ export default function HomePage() {
 
             {/* Subheading */}
             <p className="mt-6 max-w-2xl text-base sm:text-lg lg:text-xl text-[var(--muted)] leading-relaxed">
-              Multi-client competitor tracking, AI-powered gap synthesis, white-label executive PDF decks, and automated client delivery — purpose-built for high-growth marketing agencies.
+              Multi-client competitor tracking, AI-powered gap synthesis, white-label executive PDF decks, and automated client delivery, built specifically for high-growth marketing agencies.
             </p>
 
             {/* CTA Group */}
@@ -745,7 +745,7 @@ export default function HomePage() {
                 Add Client & Rivals
               </h3>
               <p className="mt-3 text-sm text-[var(--muted)] leading-relaxed">
-                Enter your client’s domain and their top 3–10 competitor websites. No custom code or proxy setup required.
+                Enter your client’s domain and their top 3 to 10 competitor websites. No custom code or proxy setup required.
               </p>
             </div>
 

@@ -79,8 +79,8 @@ export function WorkspaceHelp() {
     {
       role: "assistant",
       content: individual
-        ? "Hi — ask how to use MarketBiqs, fix a problem, or ask about your competitors."
-        : "Hi — ask how to use MarketBiqs, fix a problem, or ask about a client’s competitors. Pick a client below for rival/intel answers.",
+        ? "Hi! Ask how to use MarketBiqs, fix a problem, or ask about your competitors."
+        : "Hi! Ask how to use MarketBiqs, fix a problem, or ask about a client’s competitors. Pick a client below for rival/intel answers.",
     },
   ]);
   const threadEndRef = useRef<HTMLDivElement>(null);
@@ -170,7 +170,7 @@ export function WorkspaceHelp() {
         const next = [...prev];
         const last = next[next.length - 1];
         if (last?.role === "assistant" && !last.content.trim()) {
-          next[next.length - 1] = { role: "assistant", content: `Sorry — ${detail}` };
+          next[next.length - 1] = { role: "assistant", content: `Sorry, ${detail}` };
         }
         return next;
       });

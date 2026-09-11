@@ -93,7 +93,7 @@ export default function BrandingPage() {
             <Input
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
-              placeholder={isIndividual ? "e.g. Ali — Market intel" : "e.g. Northstar Agency"}
+              placeholder={isIndividual ? "e.g. Ali (Market intel)" : "e.g. Northstar Agency"}
               required
             />
           </div>

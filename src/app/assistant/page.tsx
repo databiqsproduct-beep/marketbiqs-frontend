@@ -57,7 +57,7 @@ export default function AssistantPage() {
     <AppShell>
       <PageHeader
         title="Agency AI assistant"
-        subtitle="ChatGPT-style briefings with streaming answers — pick a client and ask what’s changing."
+        subtitle="ChatGPT-style briefings with streaming answers. Pick a client and ask what’s changing."
       />
       {!clients.length ? (
         <Card className="py-8 text-center">

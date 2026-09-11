@@ -39,13 +39,13 @@ export default function ClientPortalPage() {
       <div className="mx-auto max-w-3xl space-y-6 px-4 sm:px-6 py-8 sm:py-10">
         <PageHeader
           title={client?.name || "Client workspace"}
-          subtitle="Friendly streaming assistant for this brand — rivals, gaps, and weekly changes."
+          subtitle="Friendly streaming assistant for this brand covering rivals, gaps, and weekly changes."
         />
         {error ? (
           <p className="text-red-600">
             {error}
             {/not authenticated|invalid token|401/i.test(error)
-              ? " — sign in to MarketBiqs, then open this portal link again."
+              ? ". Please sign in to MarketBiqs, then open this portal link again."
               : ""}
           </p>
         ) : null}

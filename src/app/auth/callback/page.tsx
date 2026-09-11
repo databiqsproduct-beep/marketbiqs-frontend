@@ -75,7 +75,7 @@ function AuthCallbackInner() {
         return;
       }
 
-      setMessage("Signed in — opening workspace…");
+      setMessage("Signed in. Opening workspace…");
       router.replace("/auth/complete");
     }
 

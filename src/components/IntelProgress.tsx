@@ -37,7 +37,7 @@ export const INTEL_STEPS = [
 
 const TIPS = [
   "Tip: Pin a rival after this run to keep them in every weekly loop.",
-  "Tip: Open Alerts next — that’s where specialty gaps show up.",
+  "Tip: Open Alerts next to view specialty gaps as they appear.",
   "Tip: Ask the AI assistant about this brand once intel finishes.",
   "Tip: Longer runs usually mean richer rival coverage.",
   "Tip: Wishlist a gap, then push a Jira ticket from Wishlist.",
