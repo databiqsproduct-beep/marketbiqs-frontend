@@ -90,7 +90,7 @@ export async function api<T>(
     }
     if (/failed to fetch|networkerror|load failed|network request failed/i.test(msg)) {
       throw new Error(
-        "Could not reach the API (timeout or network). Try again — long AI/Jira jobs sometimes hit the host limit.",
+        "Could not reach the API (timeout or network). Try again: long AI/Jira jobs sometimes hit the host limit.",
       );
     }
     throw err instanceof Error ? err : new Error(msg);
@@ -172,7 +172,7 @@ export async function runClientIntel(
     } catch (err) {
       consecutivePollFailures += 1;
       const msg = err instanceof Error ? err.message : String(err);
-      // Transient API blip / busy DB — keep polling unless it persists
+      // Transient API blip / busy DB: keep polling unless it persists
       if (
         consecutivePollFailures >= 6 ||
         (!/timed out|timeout|reach the API|Server busy|503/i.test(msg) &&
@@ -198,11 +198,11 @@ export async function runClientIntel(
   }
 
   throw new Error(
-    "Intel is taking longer than usual (Serp/AI may be slow). Close this, refresh the page — the run often finishes in the background.",
+    "Intel is taking longer than usual (Serp/AI may be slow). Close this, refresh the page: the run often finishes in the background.",
   );
 }
 
-/** @deprecated Prefer downloadReportPdf — query-token PDF auth is not supported. */
+/** @deprecated Prefer downloadReportPdf: query-token PDF auth is not supported. */
 export function pdfUrl(reportId: string) {
   return `${apiBase()}/api/reports/${reportId}/pdf`;
 }
@@ -227,7 +227,7 @@ export async function runClientAutoIntel(clientId: string) {
 export async function downloadReportPdf(reportId: string, filename: string) {
   const token = getToken();
   if (!token) {
-    throw new Error("Session expired — sign in again to download PDFs.");
+    throw new Error("Session expired. Sign in again to download PDFs.");
   }
   const agencyId = getAgencyId();
   let res: Response;
@@ -248,17 +248,17 @@ export async function downloadReportPdf(reportId: string, filename: string) {
       const data = (await res.json()) as ApiError;
       if (typeof data.detail === "string") detail = data.detail;
     } catch {
-      if (res.status === 401) detail = "Session expired — sign in again to download PDFs.";
+      if (res.status === 401) detail = "Session expired. Sign in again to download PDFs.";
       else if (res.status === 404) detail = "PDF not found for this report.";
       else detail = `Failed to download PDF (${res.status})`;
     }
     throw new Error(detail);
   }
   const blob = await res.blob();
-  // Proxy sometimes returns HTML error pages with 200 — reject those
+  // Proxy sometimes returns HTML error pages with 200: reject those
   const type = (blob.type || res.headers.get("content-type") || "").toLowerCase();
   if (type.includes("text/html") || blob.size < 64) {
-    throw new Error("PDF download returned invalid content. Redeploy may still be in progress — try again.");
+    throw new Error("PDF download returned invalid content. Redeploy may still be in progress; try again.");
   }
   const safeName = (filename || "report.pdf")
     .replace(/[^\w.\- ]+/g, "_")

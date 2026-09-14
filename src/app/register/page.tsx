@@ -191,7 +191,7 @@ function RegisterForm() {
             <Input
               value={form.agency_name}
               onChange={(e) => setForm({ ...form, agency_name: e.target.value })}
-              placeholder={isIndividual ? "e.g. Ali — Market intel" : "e.g. Northstar Agency"}
+              placeholder={isIndividual ? "e.g. Ali (Market intel)" : "e.g. Northstar Agency"}
               required
               disabled={busy}
             />

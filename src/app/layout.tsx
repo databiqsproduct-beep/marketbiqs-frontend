@@ -18,7 +18,7 @@ const manrope = Manrope({
 });
 
 export const metadata: Metadata = {
-  title: "MarketBiqs — Agency Competitive Intelligence",
+  title: "MarketBiqs | Agency Competitive Intelligence",
   description:
     "Multi-client competitor tracking, white-label reports, and AI research ops for marketing agencies.",
 };

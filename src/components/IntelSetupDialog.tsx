@@ -147,15 +147,15 @@ export function IntelSetupDialog({
               disabled={busy}
             >
               <option value="update" disabled={!hasExisting}>
-                Update current — refresh rivals you already have
+                Update current: refresh rivals you already have
               </option>
               <option value="add">
                 {hasExisting
-                  ? "Keep & add — track top rivals plus new peers"
-                  : "Add new — discover competitors from scratch"}
+                  ? "Keep & add: track top rivals plus new peers"
+                  : "Add new: discover competitors from scratch"}
               </option>
               <option value="replace">
-                Replace all — clear auto-found list and find all-new rivals
+                Replace all: clear auto-found list and find all-new rivals
               </option>
             </select>
             <p className="mt-2 text-xs text-[var(--muted)]">{modeHelp}</p>
@@ -191,8 +191,8 @@ export function IntelSetupDialog({
             </div>
             <p className="mt-2 text-xs text-[var(--muted)]">
               {scope === "local"
-                ? "We’ll fetch and show competitors for that country — not other markets."
-                : "We’ll fetch and show international peers — not a single-country list."}
+                ? "We’ll fetch and show competitors for that country instead of other markets."
+                : "We’ll fetch and show international peers instead of a single-country list."}
             </p>
           </div>
 
@@ -248,7 +248,7 @@ export function IntelSetupDialog({
                 Also generate a client report
               </span>
               <span className="mt-0.5 block text-xs text-[var(--muted)]">
-                Optional. Uses 1 report credit. Leave off to save quota — you can make a report later from the
+                Optional. Uses 1 report credit. Leave unchecked to save quota; you can make a report later from the
                 Reports tab.
               </span>
             </span>

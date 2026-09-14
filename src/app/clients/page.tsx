@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { Radar, Search } from "lucide-react";
+import { Radar, Search, Trash2 } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { IntelProgressOverlay, IntelRunPhase, useIntelProgress } from "@/components/IntelProgress";
 import { IntelSetupDialog, IntelSetupOptions } from "@/components/IntelSetupDialog";
@@ -222,7 +222,10 @@ export default function ClientsPage() {
     setError("");
     setMessage("");
     try {
-      await api(`/api/clients/${clientId}`, { method: "DELETE" });
+      await api(`/api/clients/${clientId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ is_active: false }),
+      });
       setMessage(`“${label}” archived`);
       await load();
     } catch (err) {
@@ -250,6 +253,30 @@ export default function ClientsPage() {
       setBusyId("");
     }
   }
+
+  async function deleteClient(clientId: string, name: string) {
+    const label = name || "this client";
+    if (
+      !window.confirm(
+        `Permanently delete “${label}”? This will remove the brand, all competitors, features, and reports forever. This action cannot be undone.`,
+      )
+    ) {
+      return;
+    }
+    setBusyId(`delete-${clientId}`);
+    setError("");
+    setMessage("");
+    try {
+      await api(`/api/clients/${clientId}`, { method: "DELETE" });
+      setMessage(`“${label}” permanently deleted`);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not delete client");
+    } finally {
+      setBusyId("");
+    }
+  }
+
 
   const isBusy = busy || !!busyId;
   const individualBrand = pickIndividualBrand(clients);
@@ -289,7 +316,7 @@ export default function ClientsPage() {
           subtitle={
             individual
               ? "Set up the brand you want to track, then we’ll take you to your competitors."
-              : "Add a brand, open its workspace, or check competitors from here — no separate tracker needed."
+              : "Add a brand, open its workspace, or check competitors directly from here."
           }
           actions={
             individual ? null : (
@@ -347,7 +374,7 @@ export default function ClientsPage() {
               />
             </div>
             <p className="text-sm text-[var(--muted)]">
-              Next you’ll choose how many competitors to find and where to look — then we start tracking.
+              Next you’ll choose how many competitors to find and where to look before tracking begins.
             </p>
             <Button type="submit" disabled={isBusy}>
               {busy ? "Working…" : "Continue to competitor setup"}
@@ -474,22 +501,54 @@ export default function ClientsPage() {
                         </Button>
                         <Button
                           variant="ghost"
-                          className="col-span-2 w-full !px-3 !py-2 text-sm !border-red-200 !text-red-700 hover:!bg-red-50 sm:col-span-1 sm:w-auto"
+                          className="col-span-1 w-full !px-3 !py-2 text-sm !border-amber-200 !text-amber-800 hover:!bg-amber-50 sm:w-auto"
                           disabled={isBusy}
                           onClick={() => void archiveClient(c.id, c.name)}
                           title="Archive client"
                         >
                           {busyId === `archive-${c.id}` ? "Archiving…" : "Archive"}
                         </Button>
+                        <Button
+                          variant="ghost"
+                          className="col-span-2 w-full !px-3 !py-2 text-sm !border-red-200 !text-red-700 hover:!bg-red-50 sm:col-span-1 sm:w-auto"
+                          disabled={isBusy}
+                          onClick={() => void deleteClient(c.id, c.name)}
+                          title="Delete client permanently"
+                        >
+                          {busyId === `delete-${c.id}` ? (
+                            "Deleting…"
+                          ) : (
+                            <span className="inline-flex items-center gap-1">
+                              <Trash2 size={13} /> Delete
+                            </span>
+                          )}
+                        </Button>
                       </>
                     ) : (
-                      <Button
-                        className="col-span-1 w-full !px-3 !py-2 text-sm sm:w-auto"
-                        disabled={isBusy}
-                        onClick={() => void restoreClient(c.id, c.name)}
-                      >
-                        {busyId === `restore-${c.id}` ? "Restoring…" : "Restore"}
-                      </Button>
+                      <>
+                        <Button
+                          className="col-span-1 w-full !px-3 !py-2 text-sm sm:w-auto"
+                          disabled={isBusy}
+                          onClick={() => void restoreClient(c.id, c.name)}
+                        >
+                          {busyId === `restore-${c.id}` ? "Restoring…" : "Restore"}
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          className="col-span-1 w-full !px-3 !py-2 text-sm !border-red-200 !text-red-700 hover:!bg-red-50 sm:w-auto"
+                          disabled={isBusy}
+                          onClick={() => void deleteClient(c.id, c.name)}
+                          title="Delete client permanently"
+                        >
+                          {busyId === `delete-${c.id}` ? (
+                            "Deleting…"
+                          ) : (
+                            <span className="inline-flex items-center gap-1">
+                              <Trash2 size={13} /> Delete
+                            </span>
+                          )}
+                        </Button>
+                      </>
                     )}
                   </div>
                 </div>

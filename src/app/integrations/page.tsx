@@ -115,7 +115,7 @@ export default function IntegrationsPage() {
     <AppShell>
       <PageHeader
         title="Integrations"
-        subtitle="Connect your own Jira. Biqs never uses a shared platform key — each workspace brings its own."
+        subtitle="Connect your own Jira. Biqs never uses a shared platform key, so each workspace brings its own."
       />
       {error ? <p className="text-red-600 mb-4">{error}</p> : null}
       {message ? <p className="text-[var(--accent)] mb-4">{message}</p> : null}
@@ -137,15 +137,15 @@ export default function IntegrationsPage() {
               <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-3">
                 <div>
                   <dt className="text-[11px] uppercase tracking-wide text-[var(--muted)]">Site</dt>
-                  <dd className="mt-0.5 break-all text-[var(--ink)]">{status?.base_url || "—"}</dd>
+                  <dd className="mt-0.5 break-all text-[var(--ink)]">{status?.base_url || "-"}</dd>
                 </div>
                 <div>
                   <dt className="text-[11px] uppercase tracking-wide text-[var(--muted)]">Project</dt>
-                  <dd className="mt-0.5 font-medium text-[var(--ink)]">{status?.project_key || "—"}</dd>
+                  <dd className="mt-0.5 font-medium text-[var(--ink)]">{status?.project_key || "-"}</dd>
                 </div>
                 <div>
                   <dt className="text-[11px] uppercase tracking-wide text-[var(--muted)]">Account</dt>
-                  <dd className="mt-0.5 break-all text-[var(--ink)]">{status?.email || "—"}</dd>
+                  <dd className="mt-0.5 break-all text-[var(--ink)]">{status?.email || "-"}</dd>
                 </div>
               </dl>
             </div>
@@ -165,7 +165,7 @@ export default function IntegrationsPage() {
           <p className="mt-1 text-sm text-[var(--muted)]">
             {connected
               ? "Paste a new API token if you need to rotate keys. Site and project can change too."
-              : "We’ll send build-list tickets to this Jira project using your token — never a shared Biqs key."}
+              : "We’ll send build-list tickets to this Jira project using your token, never a shared Biqs key."}
           </p>
           <form onSubmit={onConnect} className="mt-5 grid gap-3 sm:grid-cols-2">
             <div className="sm:col-span-2">

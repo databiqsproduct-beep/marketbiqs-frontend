@@ -101,9 +101,9 @@ const TAB_HELP: Record<Tab, string> = {
 };
 
 const DEFAULT_NEXT_ACTIONS = [
-  "Open Competitors — pick a rival and review the feature-by-feature comparison",
-  "Open Warnings — save important gaps to the build list, or mark done when handled",
-  "Open Build list — turn saved items into a simple step-by-step plan",
+  "Open Competitors: pick a rival and review the feature-by-feature comparison",
+  "Open Warnings: save important gaps to the build list, or mark done when handled",
+  "Open Build list: turn saved items into a simple step-by-step plan",
   "Write a short weekly summary you can share with the client",
 ];
 
@@ -125,7 +125,7 @@ function isThinFeatureDescription(name: string, description?: string | null) {
 
 function softFeatureJargon(text: string) {
   return text
-    .replace(/production[-\s]?grade\s+AI,?\s+not\s+demoware/gi, "AI that is ready for real day-to-day business use — not just a flashy demo")
+    .replace(/production[-\s]?grade\s+AI,?\s+not\s+demoware/gi, "AI that is ready for real day-to-day business use, not just a flashy demo")
     .replace(/architecture[-\s]?first\s+thinking/gi, "planning the system carefully before building anything")
     .replace(/production[-\s]?grade/gi, "ready for real day-to-day business use")
     .replace(/\bdemoware\b/gi, "a demo that looks good but is not ready for real work")
@@ -158,7 +158,7 @@ function featurePlainBlurb(
   return (
     `${name} is something ${clientName} already offers${catBit}. ` +
     `In simple terms, ${mid}${mid.endsWith(".") ? "" : "."} ` +
-    `This is part of what customers can buy or use from them today — not a future idea.`
+    `This is part of what customers can buy or use from them today (not a future idea).`
   );
 }
 
@@ -489,10 +489,33 @@ function ClientDetailPageInner() {
     setBusy("archive");
     setError("");
     try {
-      await api(`/api/clients/${clientId}`, { method: "DELETE" });
+      await api(`/api/clients/${clientId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ is_active: false }),
+      });
       window.location.href = "/clients";
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not archive client");
+      setBusy("");
+    }
+  }
+
+  async function deleteClient() {
+    const label = client?.name || "this client";
+    if (
+      !window.confirm(
+        `Permanently delete “${label}”? This will remove the brand, all competitors, features, and reports forever. This action cannot be undone.`,
+      )
+    ) {
+      return;
+    }
+    setBusy("delete");
+    setError("");
+    try {
+      await api(`/api/clients/${clientId}`, { method: "DELETE" });
+      window.location.href = "/clients";
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not delete client");
       setBusy("");
     }
   }
@@ -513,6 +536,7 @@ function ClientDetailPageInner() {
       setBusy("");
     }
   }
+
 
   async function sendFeedback(entity_type: "comparison" | "gap" | "alert", entity_id: string, rating: "useful" | "useless") {
     setBusy(`fb-${entity_id}-${rating}`);
@@ -627,7 +651,7 @@ function ClientDetailPageInner() {
       );
       setMessage(
         created.length
-          ? `Added ${created.length} tickets to the Biqs board — open Biqs to drag them across the workflow.`
+          ? `Added ${created.length} tickets to the Biqs board; open Biqs to drag them across the workflow.`
           : "These tickets are already on the Biqs board.",
       );
     } catch (err) {
@@ -768,22 +792,42 @@ function ClientDetailPageInner() {
               </Button>
             </Link>
             {individual ? null : client.is_active === false ? (
-              <Button
-                className="col-span-1 w-full sm:w-auto"
-                disabled={!!busy}
-                onClick={() => void restoreClient()}
-              >
-                {busy === "restore" ? "Restoring…" : "Restore"}
-              </Button>
+              <>
+                <Button
+                  className="col-span-1 w-full sm:w-auto"
+                  disabled={!!busy}
+                  onClick={() => void restoreClient()}
+                >
+                  {busy === "restore" ? "Restoring…" : "Restore"}
+                </Button>
+                <Button
+                  variant="ghost"
+                  className="col-span-1 w-full !border-red-200 !text-red-700 hover:!bg-red-50 sm:w-auto"
+                  disabled={!!busy}
+                  onClick={() => void deleteClient()}
+                >
+                  {busy === "delete" ? "Deleting…" : "Delete"}
+                </Button>
+              </>
             ) : (
-              <Button
-                variant="ghost"
-                className="col-span-1 w-full !border-red-200 !text-red-700 hover:!bg-red-50 sm:w-auto"
-                disabled={!!busy}
-                onClick={() => void archiveClient()}
-              >
-                {busy === "archive" ? "Archiving…" : "Archive"}
-              </Button>
+              <>
+                <Button
+                  variant="ghost"
+                  className="col-span-1 w-full !border-amber-200 !text-amber-800 hover:!bg-amber-50 sm:w-auto"
+                  disabled={!!busy}
+                  onClick={() => void archiveClient()}
+                >
+                  {busy === "archive" ? "Archiving…" : "Archive"}
+                </Button>
+                <Button
+                  variant="ghost"
+                  className="col-span-1 w-full !border-red-200 !text-red-700 hover:!bg-red-50 sm:w-auto"
+                  disabled={!!busy}
+                  onClick={() => void deleteClient()}
+                >
+                  {busy === "delete" ? "Deleting…" : "Delete"}
+                </Button>
+              </>
             )}
             <Button
               className="col-span-1 w-full sm:w-auto"
@@ -798,7 +842,7 @@ function ClientDetailPageInner() {
       {client.is_active === false ? (
         <Card className="mb-4 border-amber-200 bg-amber-50/50">
           <p className="text-sm text-amber-950">
-            This client is archived — tracking is paused. Restore it to run competitor checks again. Reports stay
+            This client is archived (tracking is paused). Restore it to run competitor checks again. Reports stay
             available below.
           </p>
         </Card>
@@ -837,7 +881,7 @@ function ClientDetailPageInner() {
               <h2 className="font-semibold text-lg">What this page is for</h2>
               <p className="mt-2 text-sm leading-relaxed text-[var(--muted)]">
                 Think of this as a weekly check-in for {client.name}. Use Competitors for detail, Warnings for gaps to
-                act on, and Build list for what the team will ship next — without repeating the same ideas in three places.
+                act on, and Build list for what the team will ship next, without repeating the same ideas in three places.
               </p>
               <div className="mt-4 grid gap-3 sm:grid-cols-3">
                 <button
@@ -870,7 +914,7 @@ function ClientDetailPageInner() {
                   <div className="text-xs uppercase tracking-wide text-[var(--muted)]">Step 3</div>
                   <div className="mt-1 text-sm font-medium text-[var(--ink)]">Ship from build list</div>
                   <p className="mt-1 text-xs leading-relaxed text-[var(--muted)]">
-                    Turn saved items into simple next steps — and write a short weekly summary for the client.
+                    Turn saved items into simple next steps and write a short weekly summary for the client.
                   </p>
                 </button>
               </div>
@@ -939,7 +983,7 @@ function ClientDetailPageInner() {
                 <div className="min-w-0">
                   <h2 className="font-semibold">Suggested order of work</h2>
                   <p className="mt-1 text-sm text-[var(--muted)] max-w-xl">
-                    A simple checklist so anyone on the team knows what to do this week — even if they’re not technical.
+                    A simple checklist so anyone on the team knows what to do this week, even if they’re not technical.
                   </p>
                 </div>
                 <Button onClick={generateWeeklyBrief} disabled={!!busy}>
@@ -990,7 +1034,7 @@ function ClientDetailPageInner() {
               <h2 className="font-semibold mb-1">What {client.name} already offers</h2>
               <p className="text-sm text-[var(--muted)] mb-4 leading-relaxed">
                 Each item below is something this brand already sells or delivers today. Descriptions are written in
-                plain English so anyone on the team can understand them — not just engineers.
+                plain English so anyone on the team can understand them, not just engineers.
               </p>
               {ownedFeatures.some((f) => isThinFeatureDescription(f.name, f.description)) ? (
                 <div className="mb-4 flex flex-col gap-2 rounded-xl border border-[var(--line)] bg-[var(--bg)]/60 px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
@@ -1174,7 +1218,7 @@ function ClientDetailPageInner() {
                       {client.name} vs {selectedCompetitor.name}
                     </h2>
                     <p className="mt-1 text-sm text-[var(--muted)] leading-relaxed">
-                      Where this brand is ahead, even, or behind — and what you can do about it.
+                      Where this brand is ahead, even, or behind, and what you can do about it.
                     </p>
                   </div>
                   <FeatureStanceChart
@@ -1191,8 +1235,8 @@ function ClientDetailPageInner() {
                   <Card key={row.id}>
                     <div className="font-semibold">{row.feature_name}</div>
                     <div className="text-xs text-[var(--muted)] mt-1">
-                      {client.name}: {row.our_status || "—"} · {selectedCompetitor.name}:{" "}
-                      {row.competitor_status || "—"} · {confidenceLabel(row.confidence_score)}
+                      {client.name}: {row.our_status || "-"} · {selectedCompetitor.name}:{" "}
+                      {row.competitor_status || "-"} · {confidenceLabel(row.confidence_score)}
                     </div>
                     {row.note ? <p className="text-sm mt-3 leading-relaxed">{row.note}</p> : null}
                     {row.how_competitor_leads ? (
@@ -1289,7 +1333,7 @@ function ClientDetailPageInner() {
                       >
                         <div className="font-medium">{f.name}</div>
                         <div className="text-xs text-[var(--muted)]">{f.category || f.status || "Feature"}</div>
-                        <p className="text-sm text-[var(--muted)] mt-1 leading-relaxed">{f.description || "—"}</p>
+                        <p className="text-sm text-[var(--muted)] mt-1 leading-relaxed">{f.description || "-"}</p>
                         {(() => {
                           const bl = buildListButton(f.name);
                           return (
@@ -1392,7 +1436,7 @@ function ClientDetailPageInner() {
             {!activeAlerts.length ? (
               <Card>
                 <p className="text-sm text-[var(--muted)] mb-3 leading-relaxed">
-                  No open warnings right now. That usually means you’re caught up — or you haven’t run a competitor check
+                  No open warnings right now. That usually means you’re caught up, or you haven’t run a competitor check
                   yet.
                 </p>
                 <Button onClick={runIntel} disabled={!!busy}>
@@ -1426,7 +1470,7 @@ function ClientDetailPageInner() {
                 </select>
               ) : (
                 <p className="mt-1 text-sm text-[var(--muted)]">
-                  Nothing saved yet — add ideas from This week’s plan, Competitors, or Warnings.
+                  Nothing saved yet. Add ideas from This week’s plan, Competitors, or Warnings.
                 </p>
               )}
               <div className="flex flex-wrap gap-2 mt-4">
@@ -1459,7 +1503,7 @@ function ClientDetailPageInner() {
             {tickets.map((t) => (
               <Card key={t.id}>
                 <div className="text-xs uppercase text-[var(--muted)]">
-                  {t.ticket_type} · {t.priority} · {t.estimated_effort || "effort TBD"} · pts {t.story_points ?? "—"}
+                  {t.ticket_type} · {t.priority} · {t.estimated_effort || "effort TBD"} · pts {t.story_points ?? "-"}
                 </div>
                 <div className="mt-1 flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
                   <h3 className="font-semibold break-words min-w-0">{t.heading}</h3>
@@ -1540,7 +1584,7 @@ function ClientDetailPageInner() {
             <Card>
               <h2 className="font-semibold mb-1">What’s trending around this brand</h2>
               <p className="text-sm text-[var(--muted)] leading-relaxed">
-                Not a rival feature list — this is the wider market buzz. Open a section below when you need it;
+                Not a rival feature list; this is the wider market buzz. Open a section below when you need it;
                 snapshots stay closed so the page stays short.
               </p>
             </Card>
@@ -1568,12 +1612,12 @@ function ClientDetailPageInner() {
                     {t.detected_at ? ` · ${new Date(t.detected_at).toLocaleString()}` : null}
                   </div>
                   <p className="text-sm text-[var(--muted)] mt-1 leading-relaxed">
-                    {t.summary || t.description || t.detail || "—"}
+                    {t.summary || t.description || t.detail || "-"}
                   </p>
                 </div>
               ))}
               {!trends.length ? (
-                <p className="text-sm text-[var(--muted)]">No rising topics yet — run a competitor check to fill this in.</p>
+                <p className="text-sm text-[var(--muted)]">No rising topics yet. Run a competitor check to fill this in.</p>
               ) : null}
             </RadarCollapsible>
 
@@ -1596,7 +1640,7 @@ function ClientDetailPageInner() {
                   <p className="text-sm text-[var(--muted)] mt-1 leading-relaxed">
                     {(s.sample_quotes || []).length
                       ? (s.sample_quotes || []).slice(0, 2).join(" · ")
-                      : s.summary || s.note || s.description || "—"}
+                      : s.summary || s.note || s.description || "-"}
                   </p>
                 </div>
               ))}

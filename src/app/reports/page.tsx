@@ -92,7 +92,7 @@ export default function ReportsPage() {
     <AppShell>
       <PageHeader
         title="All reports"
-        subtitle="Every client’s reports in one place — read the full write-up here, open the client workspace, or download a PDF."
+        subtitle="Every client’s reports in one place. Read the full write-up here, open the client workspace, or download a PDF."
         actions={
           clients.length ? (
             <Link href={`/clients/${clients[0].id}?tab=reports`}>

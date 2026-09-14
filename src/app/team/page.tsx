@@ -113,8 +113,7 @@ export default function TeamPage() {
               </select>
             </div>
             <p className="text-xs text-[var(--muted)]">
-              They receive an invite email from Supabase Auth. After accepting, they sign in with that email — no
-              temporary password.
+              They receive an invite email from Supabase Auth. After accepting, they sign in with that email without needing a temporary password.
             </p>
             <Button type="submit" disabled={busy}>
               {busy ? "Sending invite…" : "Send invite"}
@@ -129,7 +128,7 @@ export default function TeamPage() {
             <div className="space-y-3">
               {members.map((m) => {
                 const name = m.user?.full_name?.trim() || m.invited_email || "Teammate";
-                const email = m.user?.email?.trim() || m.invited_email || "—";
+                const email = m.user?.email?.trim() || m.invited_email || "-";
                 return (
                   <div
                     key={m.id}

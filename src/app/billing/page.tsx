@@ -129,7 +129,7 @@ function BillingInner() {
   useEffect(() => {
     const sessionId = search.get("session_id");
     if (search.get("checkout") === "canceled") {
-      setMessage("Checkout canceled — no charges were made.");
+      setMessage("Checkout canceled; no charges were made.");
       return;
     }
     if (!sessionId || !canManage) return;
@@ -145,7 +145,7 @@ function BillingInner() {
           );
           await load();
           if (result.ready) {
-            setMessage("Payment confirmed — your subscription and quotas are active.");
+            setMessage("Payment confirmed. Your subscription and quotas are active.");
             setBusy("");
             return;
           }
@@ -201,7 +201,7 @@ function BillingInner() {
   async function addPacks() {
     if (!budget || !canManage) return;
     if (budget.billing_model === "payg") {
-      setError("PAYG bills usage directly — client add-on packs are only for the $450 Agency plan.");
+      setError("PAYG bills usage directly; client add-on packs are only for the $450 Agency plan.");
       return;
     }
     const packCount = Number.isFinite(packs) ? Math.max(0, Math.floor(packs)) : 0;
@@ -234,7 +234,7 @@ function BillingInner() {
   async function updateScrapes() {
     if (!budget || !canManage) return;
     if (budget.billing_model === "payg") {
-      setError("PAYG already bills scrape units from usage — extra scrape packs are only for the Agency plan.");
+      setError("PAYG already bills scrape units from usage; extra scrape packs are only for the Agency plan.");
       return;
     }
     if (!budget.has_subscription) {
@@ -297,9 +297,9 @@ function BillingInner() {
         title={`${budget?.plan_name || "Workspace"} billing`}
         subtitle={
           budget?.billing_model === "payg"
-            ? "No fixed $49 plan. Card on file — month-end bill is clients, intel runs, reports, and scrapes you actually used."
+            ? "No fixed $49 plan. Card on file: month-end bill reflects clients, intel runs, reports, and scrapes you actually used."
             : budget?.plan === "creator"
-              ? "Individual: $99/month for your brand — 10 reports, 500 scrape units, up to 10 competitors. Extra scrape units $5 per 100. No client packs and no PAYG."
+              ? "Individual: $99/month for your brand (10 reports, 500 scrape units, up to 10 competitors). Extra scrape units $5 per 100. No client packs and no PAYG."
               : "Monthly Agency plan, or usage-based PAYG if you do not want the $450 subscription."
         }
       />
@@ -485,7 +485,7 @@ function BillingInner() {
                   </p>
                   {plan.id === "creator" ? (
                     <ul className="mt-4 space-y-1.5 text-sm text-[var(--muted)]">
-                      <li>Your brand workspace only — no extra client packs.</li>
+                      <li>Your brand workspace only (no extra client packs).</li>
                       <li>10 reports per month included.</li>
                       <li>500 scrape units per month included. Extra lots are $5 per 100 units.</li>
                       <li>Track up to 10 competitors. Each intel run can refresh or add within that cap (max 10 per run).</li>
@@ -523,7 +523,7 @@ function BillingInner() {
                     disabled={!!busy || !budget.stripe_configured || !budget.catalog.payg?.checkout_ready}
                     onClick={() => void checkout(0, "payg")}
                   >
-                    {busy === "checkout" ? "Opening Stripe…" : "Start PAYG — pay for usage"}
+                    {busy === "checkout" ? "Opening Stripe…" : "Start PAYG (pay for usage)"}
                   </Button>
                 ) : null}
               </Card>
@@ -574,7 +574,7 @@ function BillingInner() {
               <h2 className="font-semibold">Extra scrape units</h2>
               <p className="text-sm text-[var(--muted)] mt-2">
                 {money(budget.scrape_pack_price_cents)} per {budget.scrape_pack_units} units/month.
-                No extra clients or reports — only scrape quota.
+                No extra clients or reports (only scrape quota).
               </p>
               <div className="mt-4 flex flex-col sm:flex-row sm:items-center gap-3">
                 <select
@@ -662,7 +662,7 @@ function BillingInner() {
             <h2 className="font-semibold">Extra scrape units</h2>
             <p className="text-sm text-[var(--muted)] mt-2">
               {money(budget.scrape_pack_price_cents)} per {budget.scrape_pack_units} units/month.
-              No extra clients or reports — only scrape quota.
+              No extra clients or reports (only scrape quota).
             </p>
             <div className="mt-4 flex flex-col sm:flex-row sm:items-center gap-3">
               <select
