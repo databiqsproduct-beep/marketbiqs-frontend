@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { ChevronDown, FileText, Trash2 } from "lucide-react";
 import { Button, Card } from "@/components/ui";
+import { useConfirm } from "@/components/ConfirmDialog";
 import { api, downloadReportPdf } from "@/lib/api";
 
 export type ReportSection = {
@@ -51,6 +52,7 @@ export function ReportCard({
   const hasSections = sections.length > 0;
   const [expanded, setExpanded] = useState(defaultExpanded || !hasSections);
   const [busy, setBusy] = useState<"pdf" | "delete" | "">("");
+  const confirm = useConfirm();
   const title = report.title || "Untitled report";
 
   async function onDownload() {
@@ -65,7 +67,13 @@ export function ReportCard({
   }
 
   async function onDelete() {
-    const ok = window.confirm(`Delete “${title}”? This cannot be undone.`);
+    const ok = await confirm({
+      title: `Delete report?`,
+      message: `Permanently delete “${title}”? This cannot be undone.`,
+      confirmText: "Delete Report",
+      cancelText: "Cancel",
+      variant: "danger",
+    });
     if (!ok) return;
     setBusy("delete");
     try {

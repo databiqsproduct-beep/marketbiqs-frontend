@@ -3,6 +3,7 @@
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { Button, Card, Input, Label, PageHeader } from "@/components/ui";
+import { useConfirm } from "@/components/ConfirmDialog";
 import { api } from "@/lib/api";
 
 type JiraStatus = {
@@ -21,6 +22,7 @@ const emptyForm = {
 };
 
 export default function IntegrationsPage() {
+  const confirm = useConfirm();
   const [status, setStatus] = useState<JiraStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<"connect" | "disconnect" | "">("");
@@ -94,7 +96,14 @@ export default function IntegrationsPage() {
   }
 
   async function onDisconnect() {
-    if (!window.confirm("Disconnect Jira for this workspace? Tickets already in Jira stay there.")) return;
+    const ok = await confirm({
+      title: "Disconnect Jira?",
+      message: "Disconnect Jira for this workspace? Tickets already in Jira will stay there.",
+      confirmText: "Disconnect",
+      cancelText: "Cancel",
+      variant: "warning",
+    });
+    if (!ok) return;
     setError("");
     setMessage("");
     setBusy("disconnect");

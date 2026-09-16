@@ -175,17 +175,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return data;
   }, []);
 
-  const refresh = useCallback(async (): Promise<MeResponse | null> => {
-    try {
-      const data = await api<MeResponse>("/api/auth/me", { timeoutMs: 30_000 });
-      return applyMe(data);
-    } catch {
-      applyMe(null);
-      return null;
-    } finally {
-      setLoading(false);
-    }
-  }, [applyMe]);
+  const refresh = useCallback(
+    async (opts?: { throwOnError?: boolean }): Promise<MeResponse | null> => {
+      try {
+        const data = await api<MeResponse>("/api/auth/me", { timeoutMs: 30_000 });
+        return applyMe(data);
+      } catch (err) {
+        applyMe(null);
+        if (opts?.throwOnError) {
+          throw err;
+        }
+        return null;
+      } finally {
+        setLoading(false);
+      }
+    },
+    [applyMe],
+  );
 
   const syncSession = useCallback(
     async (session: Session | null, opts?: { requireMe?: boolean }) => {
@@ -197,7 +203,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
       setSession(session.access_token, localStorage.getItem("biqs_agency_id"));
       setLoading(true);
-      const me = await refresh();
+      let me: MeResponse | null = null;
+      try {
+        me = await refresh({ throwOnError: Boolean(opts?.requireMe) });
+      } catch (err) {
+        if (opts?.requireMe) {
+          const msg = err instanceof Error ? err.message : "";
+          if (/could not reach the api|network|failed to fetch|timed out/i.test(msg)) {
+            throw new Error(
+              "Could not reach the backend API at http://127.0.0.1:8000. Please ensure the backend server is running.",
+            );
+          }
+          throw new Error(
+            "Could not verify your session with the API. Frontend and backend must use the same Supabase project.",
+          );
+        }
+      }
       if (opts?.requireMe && !me) {
         throw new Error(
           "Could not verify your session with the API. Frontend and backend must use the same Supabase project.",

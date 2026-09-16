@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { Button, Card, Input, Label, PageHeader } from "@/components/ui";
+import { useConfirm } from "@/components/ConfirmDialog";
 import { api } from "@/lib/api";
 
 const providers = [
@@ -13,6 +14,7 @@ const providers = [
 ];
 
 export default function ByokPage() {
+  const confirm = useConfirm();
   const [keys, setKeys] = useState<any[]>([]);
   const [budget, setBudget] = useState<any>(null);
   const [provider, setProvider] = useState("groq");
@@ -62,6 +64,14 @@ export default function ByokPage() {
   }
 
   async function remove(p: string) {
+    const ok = await confirm({
+      title: `Remove ${p} API Key?`,
+      message: `Remove your custom ${p} key? Platform default keys will be used instead.`,
+      confirmText: "Remove Key",
+      cancelText: "Cancel",
+      variant: "danger",
+    });
+    if (!ok) return;
     setError("");
     setMessage("");
     setBusy("remove");

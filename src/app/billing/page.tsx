@@ -284,12 +284,27 @@ function BillingInner() {
     }
   }
 
-  const statusTone =
-    budget?.billing_status === "active" || budget?.billing_status === "trialing"
+  const isSubscribed = Boolean(
+    budget?.has_subscription &&
+      budget?.billing_status !== "not_subscribed" &&
+      budget?.billing_status !== "canceled" &&
+      budget?.billing_status !== "inactive",
+  );
+
+  const statusTone = !isSubscribed
+    ? "text-[var(--muted)]"
+    : budget?.billing_status === "active" || budget?.billing_status === "trialing"
       ? "text-[var(--accent)]"
       : budget?.billing_status === "past_due" || budget?.billing_status === "unpaid"
         ? "text-red-600"
         : "text-amber-700";
+
+  const displayStatus =
+    busy === "verify"
+      ? "Confirming payment…"
+      : !isSubscribed
+        ? "Not subscribed"
+        : (budget?.billing_status || "Not subscribed").replaceAll("_", " ");
 
   return (
     <>
@@ -330,7 +345,7 @@ function BillingInner() {
                 />
                 <Stat
                   label="Monthly total"
-                  value={money(budget.estimated_monthly_cents)}
+                  value={isSubscribed ? money(budget.estimated_monthly_cents) : "$0"}
                 />
               </>
             )}
@@ -350,12 +365,16 @@ function BillingInner() {
               <div>
                 <h2 className="font-semibold">Subscription status</h2>
                 <p className={`mt-1 text-sm font-medium capitalize ${statusTone}`}>
-                  {busy === "verify" ? "Confirming payment…" : budget.billing_status.replaceAll("_", " ")}
+                  {displayStatus}
                   {budget.cancel_at_period_end ? " · cancels at period end" : ""}
                 </p>
-                {budget.billing_period_end ? (
+                {isSubscribed && budget.billing_period_end ? (
                   <p className="mt-1 text-xs text-[var(--muted)]">
                     Current period ends {new Date(budget.billing_period_end).toLocaleDateString()}.
+                  </p>
+                ) : !isSubscribed ? (
+                  <p className="mt-1 text-xs text-[var(--muted)]">
+                    No active subscription. Subscribe to a plan or start PAYG below.
                   </p>
                 ) : null}
               </div>
