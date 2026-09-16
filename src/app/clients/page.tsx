@@ -10,6 +10,7 @@ import { IntelSetupDialog, IntelSetupOptions } from "@/components/IntelSetupDial
 import { Button, Card, Input, Label, PageHeader } from "@/components/ui";
 import { ApiRequestError, api, runClientIntel } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { useConfirm } from "@/components/ConfirmDialog";
 import { individualBrandHref, isIndividualWorkspace, pickIndividualBrand } from "@/lib/workspace";
 
 type Client = {
@@ -32,6 +33,7 @@ type StatusFilter = "active" | "archived" | "all";
 export default function ClientsPage() {
   const router = useRouter();
   const { agency } = useAuth();
+  const confirm = useConfirm();
   const individual = isIndividualWorkspace(agency);
   const [clients, setClients] = useState<Client[]>([]);
   const [open, setOpen] = useState(false);
@@ -211,13 +213,14 @@ export default function ClientsPage() {
 
   async function archiveClient(clientId: string, name: string) {
     const label = name || "this client";
-    if (
-      !window.confirm(
-        `Archive “${label}”? Tracking stops and it leaves your active list. Reports stay saved.`,
-      )
-    ) {
-      return;
-    }
+    const ok = await confirm({
+      title: `Archive “${label}”?`,
+      message: `Tracking stops and it leaves your active list. Reports stay saved.`,
+      confirmText: "Archive Client",
+      cancelText: "Cancel",
+      variant: "warning",
+    });
+    if (!ok) return;
     setBusyId(`archive-${clientId}`);
     setError("");
     setMessage("");
@@ -230,6 +233,30 @@ export default function ClientsPage() {
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not archive client");
+    } finally {
+      setBusyId("");
+    }
+  }
+
+  async function deleteClient(clientId: string, name: string) {
+    const label = name || "this client";
+    const ok = await confirm({
+      title: `Permanently delete “${label}”?`,
+      message: `This will remove the brand, all competitors, features, and reports forever. This action cannot be undone.`,
+      confirmText: "Delete Permanently",
+      cancelText: "Cancel",
+      variant: "danger",
+    });
+    if (!ok) return;
+    setBusyId(`delete-${clientId}`);
+    setError("");
+    setMessage("");
+    try {
+      await api(`/api/clients/${clientId}`, { method: "DELETE" });
+      setMessage(`“${label}” permanently deleted`);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not delete client");
     } finally {
       setBusyId("");
     }
@@ -253,30 +280,6 @@ export default function ClientsPage() {
       setBusyId("");
     }
   }
-
-  async function deleteClient(clientId: string, name: string) {
-    const label = name || "this client";
-    if (
-      !window.confirm(
-        `Permanently delete “${label}”? This will remove the brand, all competitors, features, and reports forever. This action cannot be undone.`,
-      )
-    ) {
-      return;
-    }
-    setBusyId(`delete-${clientId}`);
-    setError("");
-    setMessage("");
-    try {
-      await api(`/api/clients/${clientId}`, { method: "DELETE" });
-      setMessage(`“${label}” permanently deleted`);
-      await load();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not delete client");
-    } finally {
-      setBusyId("");
-    }
-  }
-
 
   const isBusy = busy || !!busyId;
   const individualBrand = pickIndividualBrand(clients);

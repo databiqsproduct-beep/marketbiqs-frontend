@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { FormEvent, ReactNode, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, Trash2 } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { FeatureStanceChart } from "@/components/Charts";
 import { IntelProgressOverlay, IntelRunPhase, useIntelProgress } from "@/components/IntelProgress";
@@ -12,6 +12,7 @@ import { ReportCard } from "@/components/ReportCard";
 import { Button, Card, Input, Label, PageHeader, Textarea } from "@/components/ui";
 import { api, runClientIntel } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { useConfirm } from "@/components/ConfirmDialog";
 import { isIndividualWorkspace } from "@/lib/workspace";
 
 type RadarSectionId = "trends" | "sentiment" | "snapshots";
@@ -172,6 +173,7 @@ function ClientDetailPageInner() {
   const params = useParams<{ id: string }>();
   const searchParams = useSearchParams();
   const { agency } = useAuth();
+  const confirm = useConfirm();
   const individual = isIndividualWorkspace(agency);
   const clientId = params.id;
   const [tab, setTabState] = useState<Tab>(() =>
@@ -458,7 +460,14 @@ function ClientDetailPageInner() {
 
   async function removeCompetitor(competitorId: string, competitorName: string) {
     const label = competitorName || "this competitor";
-    if (!window.confirm(`Remove ${label} from this client’s competitor list?`)) return;
+    const ok = await confirm({
+      title: `Remove ${label}?`,
+      message: `Remove ${label} from this client’s competitor list?`,
+      confirmText: "Remove Competitor",
+      cancelText: "Cancel",
+      variant: "danger",
+    });
+    if (!ok) return;
     setBusy(`remove-${competitorId}`);
     setError("");
     try {
@@ -479,13 +488,14 @@ function ClientDetailPageInner() {
 
   async function archiveClient() {
     const label = client?.name || "this client";
-    if (
-      !window.confirm(
-        `Archive “${label}”? Tracking stops and it leaves your active list. Reports stay saved.`,
-      )
-    ) {
-      return;
-    }
+    const ok = await confirm({
+      title: `Archive “${label}”?`,
+      message: `Tracking stops and it leaves your active list. Reports stay saved.`,
+      confirmText: "Archive Client",
+      cancelText: "Cancel",
+      variant: "warning",
+    });
+    if (!ok) return;
     setBusy("archive");
     setError("");
     try {
@@ -502,13 +512,14 @@ function ClientDetailPageInner() {
 
   async function deleteClient() {
     const label = client?.name || "this client";
-    if (
-      !window.confirm(
-        `Permanently delete “${label}”? This will remove the brand, all competitors, features, and reports forever. This action cannot be undone.`,
-      )
-    ) {
-      return;
-    }
+    const ok = await confirm({
+      title: `Permanently delete “${label}”?`,
+      message: `This will remove the brand, all competitors, features, and reports forever. This action cannot be undone.`,
+      confirmText: "Delete Permanently",
+      cancelText: "Cancel",
+      variant: "danger",
+    });
+    if (!ok) return;
     setBusy("delete");
     setError("");
     try {
@@ -805,8 +816,15 @@ function ClientDetailPageInner() {
                   className="col-span-1 w-full !border-red-200 !text-red-700 hover:!bg-red-50 sm:w-auto"
                   disabled={!!busy}
                   onClick={() => void deleteClient()}
+                  title="Delete client permanently"
                 >
-                  {busy === "delete" ? "Deleting…" : "Delete"}
+                  {busy === "delete" ? (
+                    "Deleting…"
+                  ) : (
+                    <span className="inline-flex items-center gap-1">
+                      <Trash2 size={13} /> Delete
+                    </span>
+                  )}
                 </Button>
               </>
             ) : (
@@ -816,6 +834,7 @@ function ClientDetailPageInner() {
                   className="col-span-1 w-full !border-amber-200 !text-amber-800 hover:!bg-amber-50 sm:w-auto"
                   disabled={!!busy}
                   onClick={() => void archiveClient()}
+                  title="Archive client"
                 >
                   {busy === "archive" ? "Archiving…" : "Archive"}
                 </Button>
@@ -824,8 +843,15 @@ function ClientDetailPageInner() {
                   className="col-span-1 w-full !border-red-200 !text-red-700 hover:!bg-red-50 sm:w-auto"
                   disabled={!!busy}
                   onClick={() => void deleteClient()}
+                  title="Delete client permanently"
                 >
-                  {busy === "delete" ? "Deleting…" : "Delete"}
+                  {busy === "delete" ? (
+                    "Deleting…"
+                  ) : (
+                    <span className="inline-flex items-center gap-1">
+                      <Trash2 size={13} /> Delete
+                    </span>
+                  )}
                 </Button>
               </>
             )}

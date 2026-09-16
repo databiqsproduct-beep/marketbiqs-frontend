@@ -10,6 +10,7 @@ import {
   ChevronRight,
   FileText,
   Search,
+  Trash2,
   X,
 } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
@@ -17,6 +18,7 @@ import { RivalPulseBar } from "@/components/Charts";
 import { Button, Card, Input, PageHeader } from "@/components/ui";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { useConfirm } from "@/components/ConfirmDialog";
 import { individualBrandHref, isIndividualWorkspace, pickIndividualBrand } from "@/lib/workspace";
 
 type PortfolioRow = {
@@ -275,6 +277,7 @@ function PortfolioSkeleton() {
 export default function DashboardPage() {
   const router = useRouter();
   const { agency } = useAuth();
+  const confirm = useConfirm();
   const individual = isIndividualWorkspace(agency);
   const [data, setData] = useState<Dashboard | null>(null);
   const [loading, setLoading] = useState(true);
@@ -467,13 +470,14 @@ export default function DashboardPage() {
   }
 
   async function archiveClient(clientId: string, clientName: string) {
-    if (
-      !window.confirm(
-        `Archive “${clientName}”? Tracking stops and it leaves your active list. Reports stay saved.`,
-      )
-    ) {
-      return;
-    }
+    const ok = await confirm({
+      title: `Archive “${clientName}”?`,
+      message: `Tracking stops and it leaves your active list. Reports stay saved.`,
+      confirmText: "Archive Client",
+      cancelText: "Cancel",
+      variant: "warning",
+    });
+    if (!ok) return;
     setError("");
     setMessage("");
     try {
@@ -489,6 +493,26 @@ export default function DashboardPage() {
     }
   }
 
+  async function deleteClient(clientId: string, clientName: string) {
+    const ok = await confirm({
+      title: `Permanently delete “${clientName}”?`,
+      message: `This will remove the brand, all competitors, features, and reports forever. This action cannot be undone.`,
+      confirmText: "Delete Permanently",
+      cancelText: "Cancel",
+      variant: "danger",
+    });
+    if (!ok) return;
+    setError("");
+    setMessage("");
+    try {
+      await api(`/api/clients/${clientId}`, { method: "DELETE" });
+      setMessage(`Deleted ${clientName}`);
+      if (expandedId === clientId) setExpandedId("");
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not delete client");
+    }
+  }
 
   useEffect(() => {
     if (!individual) return;
@@ -680,11 +704,21 @@ export default function DashboardPage() {
         ) : null}
         <Button
           variant="ghost"
-          className={`${btn} !border-transparent !text-[var(--muted)] hover:!border-red-200 hover:!bg-red-50 hover:!text-red-700`}
+          className={`${btn} !border-transparent !text-[var(--muted)] hover:!border-amber-200 hover:!bg-amber-50 hover:!text-amber-800`}
           title="Archive client"
           onClick={() => void archiveClient(c.id, c.name)}
         >
           Archive
+        </Button>
+        <Button
+          variant="ghost"
+          className={`${btn} !border-transparent !text-red-700 hover:!border-red-200 hover:!bg-red-50`}
+          title="Delete client permanently"
+          onClick={() => void deleteClient(c.id, c.name)}
+        >
+          <span className="inline-flex items-center gap-1">
+            <Trash2 size={12} /> Delete
+          </span>
         </Button>
       </div>
     );
