@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { FormEvent, useEffect, useState } from "react";
-import { AppShell } from "@/components/AppShell";
 import { Button, Card, Input, Label, PageHeader, Textarea } from "@/components/ui";
 import { api } from "@/lib/api";
 
@@ -147,7 +146,7 @@ export default function DeliveryPage() {
   const canAct = Boolean(clientId) && !loadingClient && !saving && !sending;
 
   return (
-    <AppShell>
+    <>
       <PageHeader
         title="Delivery"
         subtitle="Configure email/WhatsApp recipients and send white-label updates with full delivery logs."
@@ -303,6 +302,6 @@ export default function DeliveryPage() {
           </Card>
         </div>
       )}
-    </AppShell>
+    </>
   );
 }

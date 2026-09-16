@@ -1,7 +1,6 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import { AppShell } from "@/components/AppShell";
 import { Button, Card, Input, Label, PageHeader } from "@/components/ui";
 import { api } from "@/lib/api";
 
@@ -36,7 +35,7 @@ export default function WhiteLabelPage() {
   }
 
   return (
-    <AppShell>
+    <>
       <PageHeader
         title="White-label API"
         subtitle="Embed Biqs intelligence into your own portals. Per-use quotas via API keys you issue."
@@ -78,6 +77,6 @@ export default function WhiteLabelPage() {
           {keys.length === 0 ? <p className="text-sm text-[var(--muted)]">No embed keys yet.</p> : null}
         </Card>
       </div>
-    </AppShell>
+    </>
   );
 }

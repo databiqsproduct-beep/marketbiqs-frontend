@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { AppShell } from "@/components/AppShell";
 import { ChatPanel } from "@/components/ChatPanel";
 import { Button, Card, PageHeader } from "@/components/ui";
 import { ChatMessage, api } from "@/lib/api";
@@ -54,7 +53,7 @@ export default function AssistantPage() {
   }, [clientId]);
 
   return (
-    <AppShell>
+    <>
       <PageHeader
         title="Agency AI assistant"
         subtitle="ChatGPT-style briefings with streaming answers. Pick a client and ask what’s changing."
@@ -106,6 +105,6 @@ export default function AssistantPage() {
           </Card>
         </>
       )}
-    </AppShell>
+    </>
   );
 }

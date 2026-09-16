@@ -1,7 +1,6 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useState } from "react";
-import { AppShell } from "@/components/AppShell";
 import { Button, Card, Input, Label, PageHeader } from "@/components/ui";
 import { useConfirm } from "@/components/ConfirmDialog";
 import { api } from "@/lib/api";
@@ -121,7 +120,7 @@ export default function IntegrationsPage() {
   }
 
   return (
-    <AppShell>
+    <>
       <PageHeader
         title="Integrations"
         subtitle="Connect your own Jira. Biqs never uses a shared platform key, so each workspace brings its own."
@@ -232,6 +231,6 @@ export default function IntegrationsPage() {
           </form>
         </Card>
       )}
-    </AppShell>
+    </>
   );
 }

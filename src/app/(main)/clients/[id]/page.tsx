@@ -4,7 +4,6 @@ import Link from "next/link";
 import { FormEvent, ReactNode, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import { ChevronDown, Trash2 } from "lucide-react";
-import { AppShell } from "@/components/AppShell";
 import { FeatureStanceChart } from "@/components/Charts";
 import { IntelProgressOverlay, IntelRunPhase, useIntelProgress } from "@/components/IntelProgress";
 import { IntelSetupDialog, IntelSetupOptions } from "@/components/IntelSetupDialog";
@@ -726,7 +725,7 @@ function ClientDetailPageInner() {
 
   if (!client) {
     return (
-      <AppShell>
+      <>
         {error ? (
           <div className="space-y-3">
             <p className="text-red-600">{error}</p>
@@ -746,7 +745,7 @@ function ClientDetailPageInner() {
             </div>
           </Card>
         )}
-      </AppShell>
+      </>
     );
   }
 
@@ -763,7 +762,7 @@ function ClientDetailPageInner() {
   const nextActions = DEFAULT_NEXT_ACTIONS;
 
   return (
-    <AppShell>
+    <>
       <IntelSetupDialog
         open={setupOpen}
         clientName={client?.name}
@@ -1716,7 +1715,7 @@ function ClientDetailPageInner() {
           </>
         ) : null}
       </div>
-    </AppShell>
+    </>
   );
 }
 
@@ -1724,7 +1723,7 @@ export default function ClientDetailPage() {
   return (
     <Suspense
       fallback={
-        <AppShell>
+        <>
           <Card className="max-w-lg">
             <div className="flex items-center gap-3">
               <span className="relative flex h-10 w-10 items-center justify-center">
@@ -1737,7 +1736,7 @@ export default function ClientDetailPage() {
               </div>
             </div>
           </Card>
-        </AppShell>
+        </>
       }
     >
       <ClientDetailPageInner />

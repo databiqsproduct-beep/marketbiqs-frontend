@@ -1,7 +1,6 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import { AppShell } from "@/components/AppShell";
 import { Button, Card, Input, Label, PageHeader } from "@/components/ui";
 import { useConfirm } from "@/components/ConfirmDialog";
 import { api } from "@/lib/api";
@@ -89,7 +88,7 @@ export default function ByokPage() {
   }
 
   return (
-    <AppShell>
+    <>
       <PageHeader
         title="Bring your own API keys"
         subtitle="Optional. MarketBiqs already uses platform keys by default. Add your own Groq, Apify, SerpAPI, or Firecrawl key only if you want BYOK billing discount."
@@ -167,6 +166,6 @@ export default function ByokPage() {
           )}
         </Card>
       </div>
-    </AppShell>
+    </>
   );
 }

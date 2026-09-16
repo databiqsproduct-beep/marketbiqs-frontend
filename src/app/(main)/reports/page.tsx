@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Search } from "lucide-react";
-import { AppShell } from "@/components/AppShell";
 import { ReportCard, ReportsSkeleton } from "@/components/ReportCard";
 import { Button, Card, Input, Label, PageHeader } from "@/components/ui";
 import { api } from "@/lib/api";
@@ -89,7 +88,7 @@ export default function ReportsPage() {
     clientFilter === "all" ? null : clients.find((c) => c.id === clientFilter)?.name || null;
 
   return (
-    <AppShell>
+    <>
       <PageHeader
         title="All reports"
         subtitle="Every client’s reports in one place. Read the full write-up here, open the client workspace, or download a PDF."
@@ -221,6 +220,6 @@ export default function ReportsPage() {
           ) : null}
         </div>
       )}
-    </AppShell>
+    </>
   );
 }

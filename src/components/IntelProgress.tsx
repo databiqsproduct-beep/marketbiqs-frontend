@@ -60,9 +60,10 @@ type IntelProgressOverlayProps = {
   progress: number;
   elapsedMs: number;
   tipIndex: number;
-  successMessage?: string;
-  errorMessage?: string;
+  successMessage?: string | null;
+  errorMessage?: string | null;
   onDismiss?: () => void;
+  onViewResults?: () => void;
 };
 
 export function IntelProgressOverlay({
@@ -76,6 +77,7 @@ export function IntelProgressOverlay({
   successMessage,
   errorMessage,
   onDismiss,
+  onViewResults,
 }: IntelProgressOverlayProps) {
   if (!open) return null;
 
@@ -202,7 +204,7 @@ export function IntelProgressOverlay({
               </p>
               <button
                 type="button"
-                onClick={onDismiss}
+                onClick={onViewResults || onDismiss}
                 className="inline-flex w-full items-center justify-center rounded-xl bg-[var(--accent)] px-4 py-2.5 text-sm font-medium text-white hover:brightness-110"
               >
                 View results

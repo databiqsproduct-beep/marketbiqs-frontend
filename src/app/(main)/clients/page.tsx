@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Radar, Search, Trash2 } from "lucide-react";
-import { AppShell } from "@/components/AppShell";
 import { IntelProgressOverlay, IntelRunPhase, useIntelProgress } from "@/components/IntelProgress";
 import { IntelSetupDialog, IntelSetupOptions } from "@/components/IntelSetupDialog";
 import { Button, Card, Input, Label, PageHeader } from "@/components/ui";
@@ -53,6 +52,7 @@ export default function ClientsPage() {
   const [intelOpen, setIntelOpen] = useState(false);
   const [intelPhase, setIntelPhase] = useState<IntelRunPhase>("running");
   const [intelName, setIntelName] = useState("");
+  const [intelClientId, setIntelClientId] = useState("");
   const [intelSuccess, setIntelSuccess] = useState("");
   const [intelError, setIntelError] = useState("");
   const intelProgress = useIntelProgress(intelOpen && intelPhase === "running");
@@ -123,6 +123,7 @@ export default function ClientsPage() {
     setSetupOpen(false);
     setBusyId(client.id);
     setIntelName(client.name);
+    setIntelClientId(client.id);
     setError("");
     setMessage("");
     setIntelSuccess("");
@@ -167,6 +168,7 @@ export default function ClientsPage() {
           }),
         });
         setIntelName(created.name);
+        setIntelClientId(created.id);
         setIntelSuccess("");
         setIntelError("");
         setIntelPhase("running");
@@ -281,12 +283,13 @@ export default function ClientsPage() {
     }
   }
 
+
   const isBusy = busy || !!busyId;
   const individualBrand = pickIndividualBrand(clients);
   const individualRedirecting = individual && (loading || !!individualBrand);
 
   return (
-    <AppShell>
+    <>
       <IntelSetupDialog
         open={setupOpen}
         clientName={setupClient?.name || form.name}
@@ -310,6 +313,12 @@ export default function ClientsPage() {
         successMessage={intelSuccess}
         errorMessage={intelError}
         onDismiss={() => setIntelOpen(false)}
+        onViewResults={() => {
+          setIntelOpen(false);
+          if (intelClientId) {
+            router.push(`/clients/${intelClientId}`);
+          }
+        }}
       />
       {individualRedirecting ? (
         <p className="text-sm text-[var(--muted)]">Opening your competitors…</p>
@@ -569,6 +578,6 @@ export default function ClientsPage() {
         </div>
       </Card>
       )}
-    </AppShell>
+    </>
   );
 }

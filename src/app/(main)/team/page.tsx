@@ -1,7 +1,6 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useState } from "react";
-import { AppShell } from "@/components/AppShell";
 import { Button, Card, Input, Label, PageHeader } from "@/components/ui";
 import { api } from "@/lib/api";
 
@@ -68,7 +67,7 @@ export default function TeamPage() {
   }
 
   return (
-    <AppShell>
+    <>
       <PageHeader
         title="Team collaboration"
         subtitle="Invite account managers, strategists, and analysts into the same agency workspace."
@@ -149,6 +148,6 @@ export default function TeamPage() {
           )}
         </Card>
       </div>
-    </AppShell>
+    </>
   );
 }

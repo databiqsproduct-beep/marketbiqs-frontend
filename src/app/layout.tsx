@@ -32,8 +32,8 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en" className={`${fraunces.variable} ${manrope.variable}`}>
-      <body>
+    <html lang="en" className={`${fraunces.variable} ${manrope.variable}`} suppressHydrationWarning>
+      <body suppressHydrationWarning>
         <AuthProvider>
           <ConfirmProvider>{children}</ConfirmProvider>
         </AuthProvider>
