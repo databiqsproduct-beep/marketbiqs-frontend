@@ -13,7 +13,6 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { AppShell } from "@/components/AppShell";
 import { RivalPulseBar } from "@/components/Charts";
 import { Button, Card, Input, PageHeader } from "@/components/ui";
 import { api } from "@/lib/api";
@@ -514,6 +513,7 @@ export default function DashboardPage() {
     }
   }
 
+
   useEffect(() => {
     if (!individual) return;
     let cancelled = false;
@@ -746,14 +746,14 @@ export default function DashboardPage() {
 
   if (individual) {
     return (
-      <AppShell>
+      <>
         <p className="text-sm text-[var(--muted)]">Opening your competitors…</p>
-      </AppShell>
+      </>
     );
   }
 
   return (
-    <AppShell>
+    <>
       <PageHeader
         title="Your clients at a glance"
         subtitle="Plain view of each brand: how they’re doing, what competitors have, and what to do next."
@@ -1318,6 +1318,6 @@ export default function DashboardPage() {
       ) : error ? null : (
         <PortfolioSkeleton />
       )}
-    </AppShell>
+    </>
   );
 }

@@ -2,7 +2,6 @@
 
 import { Suspense, useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { AppShell } from "@/components/AppShell";
 import { Button, Card, PageHeader, Stat } from "@/components/ui";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -752,10 +751,10 @@ function BillingInner() {
 
 export default function BillingPage() {
   return (
-    <AppShell>
+    <>
       <Suspense fallback={<div className="text-[var(--muted)]">Loading billing…</div>}>
         <BillingInner />
       </Suspense>
-    </AppShell>
+    </>
   );
 }

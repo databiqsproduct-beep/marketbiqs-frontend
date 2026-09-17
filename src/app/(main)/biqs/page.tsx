@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { AppShell } from "@/components/AppShell";
 import { Button, PageHeader } from "@/components/ui";
 import { api } from "@/lib/api";
 
@@ -150,7 +149,7 @@ export default function BiqsPage() {
   }
 
   return (
-    <AppShell>
+    <>
       <PageHeader
         title="Biqs board"
         subtitle="Wishlist plans land here instead of Jira. Pick a client, then drag tickets across the workflow."
@@ -443,6 +442,6 @@ export default function BiqsPage() {
           )}
         </>
       )}
-    </AppShell>
+    </>
   );
 }

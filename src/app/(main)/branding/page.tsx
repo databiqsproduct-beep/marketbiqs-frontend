@@ -1,7 +1,6 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import { AppShell } from "@/components/AppShell";
 import { Button, Card, Input, Label, PageHeader, Textarea } from "@/components/ui";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -75,7 +74,7 @@ export default function BrandingPage() {
   }
 
   return (
-    <AppShell>
+    <>
       <PageHeader
         title={isIndividual ? "Report branding" : "Agency branding"}
         subtitle={
@@ -162,6 +161,6 @@ export default function BrandingPage() {
           </Button>
         </form>
       </Card>
-    </AppShell>
+    </>
   );
 }
