@@ -1,8 +1,8 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
-import { api, clearSession, setSession } from "@/lib/api";
+import { ApiRequestError, api, clearSession, setSession } from "@/lib/api";
 import { getSupabaseBrowser, isSupabaseConfigured } from "@/lib/supabase";
 
 type User = { id: string; email: string; full_name: string };
@@ -151,6 +151,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [role, setRole] = useState<string | null>(null);
   const [needsBootstrap, setNeedsBootstrap] = useState(false);
   const [loading, setLoading] = useState(true);
+  const userRef = useRef<User | null>(null);
+  userRef.current = user;
 
   useEffect(() => {
     applyAgencyTheme(agency);
@@ -181,7 +183,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const data = await api<MeResponse>("/api/auth/me", { timeoutMs: 30_000 });
         return applyMe(data);
       } catch (err) {
-        applyMe(null);
+        const isAuthError =
+          err instanceof ApiRequestError && (err.status === 401 || err.status === 403);
+        if (isAuthError || !userRef.current) {
+          applyMe(null);
+        }
         if (opts?.throwOnError) {
           throw err;
         }
@@ -202,7 +208,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return null;
       }
       setSession(session.access_token, localStorage.getItem("biqs_agency_id"));
-      setLoading(true);
+      if (!userRef.current) {
+        setLoading(true);
+      }
       let me: MeResponse | null = null;
       try {
         me = await refresh({ throwOnError: Boolean(opts?.requireMe) });

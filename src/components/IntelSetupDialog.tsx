@@ -1,13 +1,19 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Button, Input, Label } from "@/components/ui";
+import { getIndustries, getNichesForIndustry } from "@/lib/taxonomy";
 
 export type CompetitorRunMode = "update" | "add" | "replace";
 
 export type IntelSetupOptions = {
   competitor_scope: "global" | "local";
   competitor_country?: string;
+  competitor_city?: string;
+  primary_offering?: string;
+  customer_type?: string;
+  industry?: string;
+  niche?: string;
   competitor_count: number;
   /** update = refresh existing; add = find N new and keep previous; replace = clear auto rivals and find a fresh set */
   competitor_mode: CompetitorRunMode;
@@ -18,7 +24,13 @@ export type IntelSetupOptions = {
 type IntelSetupDialogProps = {
   open: boolean;
   clientName?: string;
+  clientWebsite?: string;
   defaultCountry?: string;
+  defaultCity?: string;
+  defaultPrimaryOffering?: string;
+  defaultCustomerType?: string;
+  defaultIndustry?: string;
+  defaultNiche?: string;
   existingCompetitorCount?: number;
   /** Individual stored-rival cap. Agency omits this (10 per run only). */
   maxTrackedRivals?: number | null;
@@ -43,7 +55,13 @@ const COUNTRY_SUGGESTIONS = [
 export function IntelSetupDialog({
   open,
   clientName,
+  clientWebsite,
   defaultCountry = "",
+  defaultCity = "",
+  defaultPrimaryOffering = "",
+  defaultCustomerType = "",
+  defaultIndustry = "",
+  defaultNiche = "",
   existingCompetitorCount = 0,
   maxTrackedRivals = null,
   busy = false,
@@ -54,24 +72,49 @@ export function IntelSetupDialog({
   const storedCap = maxTrackedRivals && maxTrackedRivals > 0 ? maxTrackedRivals : null;
   const [scope, setScope] = useState<"global" | "local">("local");
   const [country, setCountry] = useState(defaultCountry);
+  const [city, setCity] = useState(defaultCity);
+  const [primaryOffering, setPrimaryOffering] = useState(defaultPrimaryOffering);
+  const [customerType, setCustomerType] = useState(defaultCustomerType);
+  const [industry, setIndustry] = useState(defaultIndustry);
+  const [niche, setNiche] = useState(defaultNiche);
   const [count, setCount] = useState(5);
   const [mode, setMode] = useState<CompetitorRunMode>("add");
   const [generateReport, setGenerateReport] = useState(false);
   const [error, setError] = useState("");
 
   const sliderMax = Math.max(1, Math.min(10, storedCap ?? 10));
+  const lastClientRef = useRef<string | undefined>(undefined);
 
   useEffect(() => {
     if (!open) return;
-    setCountry(defaultCountry);
-    setMode(hasExisting ? "add" : "add");
-    setGenerateReport(false);
-    setError("");
-  }, [open, defaultCountry, hasExisting]);
+    const isNewTarget = lastClientRef.current !== clientName;
+    lastClientRef.current = clientName;
+
+    if (isNewTarget) {
+      setCountry(defaultCountry);
+      setCity(defaultCity);
+      setPrimaryOffering(defaultPrimaryOffering);
+      setCustomerType(defaultCustomerType);
+      setIndustry(defaultIndustry);
+      setNiche(defaultNiche);
+      setMode("add");
+      setGenerateReport(false);
+      setError("");
+    } else {
+      setCountry((prev) => prev.trim() || defaultCountry);
+      setCity((prev) => prev.trim() || defaultCity);
+      setPrimaryOffering((prev) => prev.trim() || defaultPrimaryOffering);
+      setCustomerType((prev) => prev || defaultCustomerType);
+      setIndustry((prev) => prev.trim() || defaultIndustry);
+      setNiche((prev) => prev.trim() || defaultNiche);
+    }
+  }, [open, clientName, defaultCountry, defaultCity, defaultPrimaryOffering, defaultCustomerType, defaultIndustry, defaultNiche]);
 
   useEffect(() => {
     if (count > sliderMax) setCount(sliderMax);
   }, [count, sliderMax]);
+
+  const suggestedNiches = useMemo(() => getNichesForIndustry(industry), [industry]);
 
   const title = useMemo(
     () => (clientName ? `Run intel for ${clientName}` : "Run intelligence"),
@@ -99,7 +142,11 @@ export function IntelSetupDialog({
   function submit() {
     setError("");
     if (scope === "local" && !country.trim()) {
-      setError("Enter a country for local competitors.");
+      setError("Country is required for local competitor discovery.");
+      return;
+    }
+    if (!clientWebsite?.trim() && !primaryOffering.trim()) {
+      setError("Please describe what this company primarily sells or does.");
       return;
     }
     if (mode === "update" && !hasExisting) {
@@ -113,6 +160,11 @@ export function IntelSetupDialog({
     onConfirm({
       competitor_scope: scope,
       competitor_country: scope === "local" ? country.trim() : undefined,
+      competitor_city: scope === "local" && city.trim() ? city.trim() : undefined,
+      primary_offering: primaryOffering.trim() || undefined,
+      customer_type: customerType || undefined,
+      industry: industry.trim() || undefined,
+      niche: niche.trim() || undefined,
       competitor_count: count,
       competitor_mode: mode,
       generate_report: generateReport,
@@ -197,22 +249,114 @@ export function IntelSetupDialog({
           </div>
 
           {scope === "local" ? (
+            <div className="space-y-3">
+              <div>
+                <Label>Country (Required for local)</Label>
+                <Input
+                  value={country}
+                  onChange={(e) => setCountry(e.target.value)}
+                  placeholder="e.g. Pakistan, United States, UAE"
+                  list="intel-country-suggestions"
+                  autoFocus
+                />
+                <datalist id="intel-country-suggestions">
+                  {COUNTRY_SUGGESTIONS.map((c) => (
+                    <option key={c} value={c} />
+                  ))}
+                </datalist>
+              </div>
+              <div>
+                <Label>City / Region (Optional)</Label>
+                <Input
+                  value={city}
+                  onChange={(e) => setCity(e.target.value)}
+                  placeholder="e.g. Lahore, New York, Riyadh"
+                />
+                <p className="mt-1 text-[11px] text-[var(--muted)]">Focuses search on competitors in this specific metropolitan area.</p>
+              </div>
+            </div>
+          ) : null}
+
+          {!clientWebsite?.trim() ? (
             <div>
-              <Label>Country</Label>
-              <Input
-                value={country}
-                onChange={(e) => setCountry(e.target.value)}
-                placeholder="e.g. Pakistan, United States, UAE"
-                list="intel-country-suggestions"
-                autoFocus
+              <Label>What does this company primarily sell or do? (Required)</Label>
+              <textarea
+                className="mt-1 w-full rounded-xl border border-[var(--line)] bg-white px-3 py-2.5 text-sm outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent-soft)]"
+                rows={2}
+                value={primaryOffering}
+                onChange={(e) => setPrimaryOffering(e.target.value)}
+                placeholder="e.g. Premium women's ready-to-wear clothing sold online and through retail outlets."
               />
-              <datalist id="intel-country-suggestions">
-                {COUNTRY_SUGGESTIONS.map((c) => (
-                  <option key={c} value={c} />
+              <p className="mt-1 text-[11px] text-[var(--muted)]">
+                Because no website is provided, this description grounds competitor discovery in your actual offerings.
+              </p>
+            </div>
+          ) : null}
+
+          <div className="space-y-3">
+            <div>
+              <div className="flex items-center justify-between">
+                <Label>Industry (Optional)</Label>
+                <span className="text-[11px] text-[var(--muted)]">Focuses market sector</span>
+              </div>
+              <Input
+                value={industry}
+                onChange={(e) => setIndustry(e.target.value)}
+                placeholder="e.g. Food & Hospitality, Software & Technology"
+                list="intel-industry-suggestions"
+              />
+              <datalist id="intel-industry-suggestions">
+                {getIndustries().map((ind) => (
+                  <option key={ind} value={ind} />
                 ))}
               </datalist>
             </div>
-          ) : null}
+
+            <div>
+              <div className="flex items-center justify-between">
+                <Label>Market Niche (Optional)</Label>
+                <span className="text-[11px] text-[var(--muted)]">e.g. Pizza & Fast Food Delivery</span>
+              </div>
+              <Input
+                value={niche}
+                onChange={(e) => setNiche(e.target.value)}
+                placeholder="e.g. Pizza & Fast Food Delivery, B2B SaaS"
+              />
+              {suggestedNiches.length > 0 ? (
+                <div className="mt-1.5 flex flex-wrap gap-1.5">
+                  {suggestedNiches.slice(0, 5).map((sNiche) => (
+                    <button
+                      key={sNiche}
+                      type="button"
+                      onClick={() => setNiche(sNiche)}
+                      className={`rounded-lg px-2 py-0.5 text-[11px] font-medium transition ${
+                        niche.toLowerCase() === sNiche.toLowerCase()
+                          ? "bg-[var(--accent)] text-white"
+                          : "bg-black/5 text-[var(--ink)] hover:bg-black/10"
+                      }`}
+                    >
+                      {sNiche}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          </div>
+
+          <div>
+            <Label>Customer type (Optional)</Label>
+            <select
+              className="mt-1 w-full rounded-xl border border-[var(--line)] bg-white px-3 py-2.5 text-sm outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent-soft)]"
+              value={customerType}
+              onChange={(e) => setCustomerType(e.target.value)}
+            >
+              <option value="">Not sure / Infer automatically</option>
+              <option value="b2c">B2C (Consumers)</option>
+              <option value="b2b">B2B (Businesses)</option>
+              <option value="both">Both B2B & B2C</option>
+            </select>
+          </div>
+
 
           <div>
             <div className="mb-1.5 flex items-center justify-between gap-2">

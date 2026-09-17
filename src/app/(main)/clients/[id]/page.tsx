@@ -246,15 +246,32 @@ function ClientDetailPageInner() {
     setTrends(Array.isArray(snap.trends) ? snap.trends : []);
     setSentiment(Array.isArray(snap.sentiment) ? snap.sentiment : []);
     setSnapshots(Array.isArray(snap.snapshots) ? snap.snapshots : []);
-    setComparisons(Array.isArray(snap.comparisons) ? snap.comparisons : []);
-    setCompetitorDetail(snap.competitor_detail || null);
     setError("");
+
     const comps = Array.isArray(snap.competitors) ? snap.competitors : [];
     const wish = Array.isArray(snap.wishlist) ? snap.wishlist : [];
-    if (comps[0]) {
-      primedRivalId.current = comps[0].id;
-      if (!selectedCompetitorId) setSelectedCompetitorId(comps[0].id);
+
+    // If the user already selected a competitor that still exists, keep showing their comparisons & details
+    if (
+      selectedCompetitorId &&
+      comps.some((c: any) => c.id === selectedCompetitorId) &&
+      selectedCompetitorId !== comps[0]?.id
+    ) {
+      api<any[]>(`/api/clients/${clientId}/comparisons?competitor_id=${selectedCompetitorId}`)
+        .then(setComparisons)
+        .catch(() => setComparisons([]));
+      api<any>(`/api/clients/${clientId}/competitors/${selectedCompetitorId}`)
+        .then(setCompetitorDetail)
+        .catch(() => setCompetitorDetail(null));
+    } else {
+      setComparisons(Array.isArray(snap.comparisons) ? snap.comparisons : []);
+      setCompetitorDetail(snap.competitor_detail || null);
+      if (comps[0]) {
+        primedRivalId.current = comps[0].id;
+        if (!selectedCompetitorId) setSelectedCompetitorId(comps[0].id);
+      }
     }
+
     if (!selectedFeatureId && wish[0]) setSelectedFeatureId(wish[0].id);
   }
 
@@ -351,7 +368,7 @@ function ClientDetailPageInner() {
     if (!ownedFeatures.some((f) => isThinFeatureDescription(f.name, f.description))) return;
     clarifyTried.current = true;
     clarifyFeatureDescriptions().catch(() => {
-      clarifyTried.current = false;
+      // Keep clarifyTried.current true on failure so it does not loop infinitely
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab, clientId, ownedFeatures.length]);
@@ -723,6 +740,68 @@ function ClientDetailPageInner() {
     }
   }
 
+  const defaultCountry = useMemo(() => {
+    for (const ln of (client?.notes || "").split("\n")) {
+      const low = ln.toLowerCase().trim();
+      if (low.startsWith("market:") || low.startsWith("country:")) {
+        return ln.split(":", 2)[1]?.trim() || "";
+      }
+    }
+    return "";
+  }, [client?.notes]);
+
+  const defaultCity = useMemo(() => {
+    for (const ln of (client?.notes || "").split("\n")) {
+      const low = ln.toLowerCase().trim();
+      if (low.startsWith("city:")) {
+        return ln.split(":", 2)[1]?.trim() || "";
+      }
+    }
+    return "";
+  }, [client?.notes]);
+
+  const defaultOffering = useMemo(() => {
+    for (const ln of (client?.notes || "").split("\n")) {
+      const low = ln.toLowerCase().trim();
+      if (low.startsWith("primary offering:") || low.startsWith("offering:")) {
+        return ln.split(":", 2)[1]?.trim() || "";
+      }
+    }
+    return "";
+  }, [client?.notes]);
+
+  const defaultCustomerType = useMemo(() => {
+    for (const ln of (client?.notes || "").split("\n")) {
+      const low = ln.toLowerCase().trim();
+      if (low.startsWith("customer type:")) {
+        return ln.split(":", 2)[1]?.trim() || "";
+      }
+    }
+    return "";
+  }, [client?.notes]);
+
+  const defaultIndustry = useMemo(() => {
+    if (client?.industry) return client.industry;
+    for (const ln of (client?.notes || "").split("\n")) {
+      const low = ln.toLowerCase().trim();
+      if (low.startsWith("industry:")) {
+        return ln.split(":", 2)[1]?.trim() || "";
+      }
+    }
+    return "";
+  }, [client?.industry, client?.notes]);
+
+  const defaultNiche = useMemo(() => {
+    if (client?.niche) return client.niche;
+    for (const ln of (client?.notes || "").split("\n")) {
+      const low = ln.toLowerCase().trim();
+      if (low.startsWith("niche:")) {
+        return ln.split(":", 2)[1]?.trim() || "";
+      }
+    }
+    return "";
+  }, [client?.niche, client?.notes]);
+
   if (!client) {
     return (
       <>
@@ -766,6 +845,13 @@ function ClientDetailPageInner() {
       <IntelSetupDialog
         open={setupOpen}
         clientName={client?.name}
+        clientWebsite={client?.website || undefined}
+        defaultCountry={defaultCountry}
+        defaultCity={defaultCity}
+        defaultPrimaryOffering={defaultOffering}
+        defaultCustomerType={defaultCustomerType}
+        defaultIndustry={defaultIndustry}
+        defaultNiche={defaultNiche}
         existingCompetitorCount={competitors.filter((c) => c.is_tracking !== false).length}
         maxTrackedRivals={individual ? 10 : null}
         busy={busy === "pack"}
