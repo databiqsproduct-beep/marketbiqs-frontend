@@ -135,6 +135,11 @@ export async function runClientIntel(
   options: {
     competitor_scope: "global" | "local";
     competitor_country?: string;
+    competitor_city?: string;
+    primary_offering?: string;
+    customer_type?: string;
+    industry?: string;
+    niche?: string;
     competitor_count: number;
     competitor_mode?: "update" | "add" | "replace";
     generate_report?: boolean;
@@ -145,6 +150,11 @@ export async function runClientIntel(
     body: JSON.stringify({
       competitor_scope: options.competitor_scope,
       competitor_country: options.competitor_country || null,
+      competitor_city: options.competitor_city || null,
+      primary_offering: options.primary_offering || null,
+      customer_type: options.customer_type || null,
+      industry: options.industry || null,
+      niche: options.niche || null,
       competitor_count: options.competitor_count,
       competitor_mode: options.competitor_mode || "add",
       generate_report: Boolean(options.generate_report),

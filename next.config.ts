@@ -8,6 +8,7 @@ const backend = (
 ).replace(/\/$/, "");
 
 const nextConfig: NextConfig = {
+  serverExternalPackages: ["@supabase/supabase-js", "@supabase/ssr"],
   outputFileTracingRoot: path.join(__dirname),
   async rewrites() {
     if (!backend) return [];

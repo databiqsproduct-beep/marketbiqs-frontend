@@ -11,6 +11,7 @@ import { ApiRequestError, api, runClientIntel } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useConfirm } from "@/components/ConfirmDialog";
 import { individualBrandHref, isIndividualWorkspace, pickIndividualBrand } from "@/lib/workspace";
+import { getIndustries, getNichesForIndustry } from "@/lib/taxonomy";
 
 type Client = {
   id: string;
@@ -18,6 +19,7 @@ type Client = {
   industry?: string | null;
   website?: string | null;
   niche?: string | null;
+  notes?: string | null;
   is_active: boolean;
   delivery_channel: string;
   rivals_count?: number;
@@ -46,7 +48,9 @@ export default function ClientsPage() {
   const [form, setForm] = useState({
     name: "",
     industry: "",
+    niche: "",
     website: "",
+    primary_offering: "",
     delivery_emails: "",
   });
   const [intelOpen, setIntelOpen] = useState(false);
@@ -78,10 +82,10 @@ export default function ClientsPage() {
   }, []);
 
   useEffect(() => {
-    if (!individual || loading) return;
+    if (!individual || loading || open || pendingCreate) return;
     const brand = pickIndividualBrand(clients);
     if (brand) router.replace(individualBrandHref(brand.id));
-  }, [individual, loading, clients, router]);
+  }, [individual, loading, open, pendingCreate, clients, router]);
 
   const filtered = useMemo(() => {
     let rows = clients;
@@ -111,6 +115,7 @@ export default function ClientsPage() {
       id: "",
       name: form.name,
       industry: form.industry || null,
+      niche: form.niche || null,
       website: form.website || null,
       is_active: true,
       delivery_channel: "email",
@@ -159,8 +164,13 @@ export default function ClientsPage() {
           method: "POST",
           body: JSON.stringify({
             name: form.name,
-            industry: form.industry || null,
+            industry: options.industry || form.industry || null,
+            niche: options.niche || form.niche || null,
             website: form.website || null,
+            primary_offering: form.primary_offering || options.primary_offering || null,
+            customer_type: options.customer_type || null,
+            country: options.competitor_country || null,
+            city: options.competitor_city || null,
             delivery_emails: form.delivery_emails
               .split(",")
               .map((s) => s.trim())
@@ -180,7 +190,7 @@ export default function ClientsPage() {
         setMessage(summary);
         setIntelSuccess(summary);
         setIntelPhase("success");
-        setForm({ name: "", industry: "", website: "", delivery_emails: "" });
+        setForm({ name: "", industry: "", niche: "", website: "", primary_offering: "", delivery_emails: "" });
         setOpen(false);
         await load();
       } catch (err) {
@@ -286,13 +296,90 @@ export default function ClientsPage() {
 
   const isBusy = busy || !!busyId;
   const individualBrand = pickIndividualBrand(clients);
-  const individualRedirecting = individual && (loading || !!individualBrand);
+  const individualRedirecting = individual && (loading || !!individualBrand) && !open && !pendingCreate;
+
+  const setupClientCountry = useMemo(() => {
+    if (pendingCreate) return "";
+    for (const ln of (setupClient?.notes || "").split("\n")) {
+      const low = ln.toLowerCase().trim();
+      if (low.startsWith("market:") || low.startsWith("country:")) {
+        return ln.split(":", 2)[1]?.trim() || "";
+      }
+    }
+    return "";
+  }, [pendingCreate, setupClient?.notes]);
+
+  const setupClientCity = useMemo(() => {
+    if (pendingCreate) return "";
+    for (const ln of (setupClient?.notes || "").split("\n")) {
+      const low = ln.toLowerCase().trim();
+      if (low.startsWith("city:")) {
+        return ln.split(":", 2)[1]?.trim() || "";
+      }
+    }
+    return "";
+  }, [pendingCreate, setupClient?.notes]);
+
+  const setupClientOffering = useMemo(() => {
+    if (pendingCreate) return form.primary_offering;
+    for (const ln of (setupClient?.notes || "").split("\n")) {
+      const low = ln.toLowerCase().trim();
+      if (low.startsWith("primary offering:") || low.startsWith("offering:")) {
+        return ln.split(":", 2)[1]?.trim() || "";
+      }
+    }
+    return form.primary_offering;
+  }, [pendingCreate, setupClient?.notes, form.primary_offering]);
+
+  const setupClientCustomerType = useMemo(() => {
+    if (pendingCreate) return "";
+    for (const ln of (setupClient?.notes || "").split("\n")) {
+      const low = ln.toLowerCase().trim();
+      if (low.startsWith("customer type:")) {
+        return ln.split(":", 2)[1]?.trim() || "";
+      }
+    }
+    return "";
+  }, [pendingCreate, setupClient?.notes]);
+
+  const setupClientIndustry = useMemo(() => {
+    if (pendingCreate) return form.industry;
+    if (setupClient?.industry) return setupClient.industry;
+    for (const ln of (setupClient?.notes || "").split("\n")) {
+      const low = ln.toLowerCase().trim();
+      if (low.startsWith("industry:")) {
+        return ln.split(":", 2)[1]?.trim() || "";
+      }
+    }
+    return form.industry;
+  }, [pendingCreate, setupClient?.industry, setupClient?.notes, form.industry]);
+
+  const setupClientNiche = useMemo(() => {
+    if (pendingCreate) return form.niche;
+    if (setupClient?.niche) return setupClient.niche;
+    for (const ln of (setupClient?.notes || "").split("\n")) {
+      const low = ln.toLowerCase().trim();
+      if (low.startsWith("niche:")) {
+        return ln.split(":", 2)[1]?.trim() || "";
+      }
+    }
+    return form.niche;
+  }, [pendingCreate, setupClient?.niche, setupClient?.notes, form.niche]);
+
+  const clientSuggestedNiches = useMemo(() => getNichesForIndustry(form.industry), [form.industry]);
 
   return (
     <>
       <IntelSetupDialog
         open={setupOpen}
         clientName={setupClient?.name || form.name}
+        clientWebsite={setupClient?.website || form.website || undefined}
+        defaultCountry={setupClientCountry}
+        defaultCity={setupClientCity}
+        defaultPrimaryOffering={setupClientOffering}
+        defaultCustomerType={setupClientCustomerType}
+        defaultIndustry={setupClientIndustry}
+        defaultNiche={setupClientNiche}
         existingCompetitorCount={setupClient?.rivals_count ?? 0}
         busy={isBusy}
         onCancel={() => {
@@ -358,15 +445,7 @@ export default function ClientsPage() {
               <Input
                 value={form.name}
                 onChange={(e) => setForm({ ...form, name: e.target.value })}
-                required
-              />
-            </div>
-            <div>
-              <Label>Website</Label>
-              <Input
-                value={form.website}
-                onChange={(e) => setForm({ ...form, website: e.target.value })}
-                placeholder="https://"
+                placeholder="e.g. Acme Studio"
                 required
               />
             </div>
@@ -375,8 +454,69 @@ export default function ClientsPage() {
               <Input
                 value={form.industry}
                 onChange={(e) => setForm({ ...form, industry: e.target.value })}
+                placeholder="e.g. Food & Hospitality, Software & Technology, Healthcare"
+                list="client-create-industry-suggestions"
+                required
+              />
+              <datalist id="client-create-industry-suggestions">
+                {getIndustries().map((ind) => (
+                  <option key={ind} value={ind} />
+                ))}
+              </datalist>
+            </div>
+            <div>
+              <div className="flex items-center justify-between">
+                <Label>Sub-Niche / Category (Optional)</Label>
+                <span className="text-[11px] text-[var(--muted)]">e.g. Pizza & Fast Food Delivery</span>
+              </div>
+              <Input
+                value={form.niche}
+                onChange={(e) => setForm({ ...form, niche: e.target.value })}
+                placeholder="e.g. Pizza & Fast Food Delivery, B2B SaaS"
+              />
+              {clientSuggestedNiches.length > 0 ? (
+                <div className="mt-1.5 flex flex-wrap gap-1.5">
+                  {clientSuggestedNiches.slice(0, 5).map((sNiche) => (
+                    <button
+                      key={sNiche}
+                      type="button"
+                      onClick={() => setForm({ ...form, niche: sNiche })}
+                      className={`rounded-lg px-2 py-0.5 text-[11px] font-medium transition ${
+                        form.niche.toLowerCase() === sNiche.toLowerCase()
+                          ? "bg-[var(--accent)] text-white"
+                          : "bg-black/5 text-[var(--ink)] hover:bg-black/10"
+                      }`}
+                    >
+                      {sNiche}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+            <div>
+              <Label>Website (Optional)</Label>
+              <Input
+                value={form.website}
+                onChange={(e) => setForm({ ...form, website: e.target.value })}
+                placeholder="https://example.com"
               />
             </div>
+            {!form.website.trim() ? (
+              <div>
+                <Label>What does this company primarily sell or do? (Required)</Label>
+                <textarea
+                  className="mt-1 w-full rounded-xl border border-[var(--line)] bg-white px-3 py-2.5 text-sm outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent-soft)]"
+                  rows={2}
+                  value={form.primary_offering}
+                  onChange={(e) => setForm({ ...form, primary_offering: e.target.value })}
+                  placeholder="e.g. Premium women's ready-to-wear clothing sold online and through retail outlets."
+                  required
+                />
+                <p className="mt-1 text-[11px] text-[var(--muted)]">
+                  Since no website is provided, this description grounds competitor discovery in your actual offerings.
+                </p>
+              </div>
+            ) : null}
             <div>
               <Label>Delivery emails</Label>
               <Input
@@ -393,6 +533,7 @@ export default function ClientsPage() {
             </Button>
           </form>
         </Card>
+
       ) : null}
 
       {individual ? null : (
