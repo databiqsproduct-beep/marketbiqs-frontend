@@ -76,8 +76,8 @@ export function Textarea(props: React.TextareaHTMLAttributes<HTMLTextAreaElement
   );
 }
 
-export function Label({ children }: { children: React.ReactNode }) {
-  return <label className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-[var(--muted)]">{children}</label>;
+export function Label({ children, className = "" }: { children: React.ReactNode; className?: string }) {
+  return <label className={`mb-1.5 block text-xs font-medium uppercase tracking-wide text-[var(--muted)] ${className}`}>{children}</label>;
 }
 
 export function Stat({ label, value }: { label: string; value: string | number }) {
