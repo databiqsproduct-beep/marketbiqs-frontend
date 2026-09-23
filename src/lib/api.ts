@@ -234,6 +234,48 @@ export async function runClientAutoIntel(clientId: string) {
   };
 }
 
+export interface NicheDetectionResult {
+  industry: string;
+  niche: string;
+  primary_offering: string;
+  customer_type: string;
+  business_model: string;
+  confidence: number;
+  evidence: string;
+  suggested_alternatives: string[];
+}
+
+export async function detectClientNiche(data: {
+  name: string;
+  website?: string | null;
+  country?: string | null;
+  city?: string | null;
+  notes?: string | null;
+  primary_offering?: string | null;
+}): Promise<NicheDetectionResult> {
+  return api<NicheDetectionResult>("/api/clients/detect-niche", {
+    method: "POST",
+    body: JSON.stringify({
+      name: data.name.trim(),
+      website: data.website?.trim() || null,
+      country: data.country?.trim() || null,
+      city: data.city?.trim() || null,
+      notes: data.notes?.trim() || null,
+      primary_offering: data.primary_offering?.trim() || null,
+    }),
+  });
+}
+
+export async function detectClientNicheById(
+  clientId: string,
+  applyToClient: boolean = false,
+): Promise<NicheDetectionResult> {
+  return api<NicheDetectionResult>(
+    `/api/clients/${clientId}/detect-niche?apply_to_client=${applyToClient}`,
+    { method: "POST" },
+  );
+}
+
 export async function downloadReportPdf(reportId: string, filename: string) {
   const token = getToken();
   if (!token) {

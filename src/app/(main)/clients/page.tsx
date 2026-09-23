@@ -3,11 +3,11 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { Radar, Search, Trash2 } from "lucide-react";
+import { CheckCircle2, Loader2, Radar, Search, Sparkles, Trash2 } from "lucide-react";
 import { IntelProgressOverlay, IntelRunPhase, useIntelProgress } from "@/components/IntelProgress";
 import { IntelSetupDialog, IntelSetupOptions } from "@/components/IntelSetupDialog";
 import { Button, Card, Input, Label, PageHeader } from "@/components/ui";
-import { ApiRequestError, api, runClientIntel } from "@/lib/api";
+import { ApiRequestError, api, detectClientNiche, runClientIntel } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useConfirm } from "@/components/ConfirmDialog";
 import { individualBrandHref, isIndividualWorkspace, pickIndividualBrand } from "@/lib/workspace";
@@ -63,6 +63,47 @@ export default function ClientsPage() {
   const [setupOpen, setSetupOpen] = useState(false);
   const [setupClient, setSetupClient] = useState<Client | null>(null);
   const [pendingCreate, setPendingCreate] = useState(false);
+  const [detectingNiche, setDetectingNiche] = useState(false);
+  const [detectedNicheMeta, setDetectedNicheMeta] = useState<{
+    confidence: number;
+    evidence: string;
+    alternatives: string[];
+  } | null>(null);
+  const [nicheDetectError, setNicheDetectError] = useState("");
+
+  async function handleAutoDetectNiche() {
+    if (!form.name.trim()) return;
+    setDetectingNiche(true);
+    setNicheDetectError("");
+    try {
+      const res = await detectClientNiche({
+        name: form.name,
+        website: form.website || null,
+        primary_offering: form.primary_offering || null,
+      });
+      setForm((prev) => ({
+        ...prev,
+        niche: res.niche || prev.niche,
+        industry:
+          (!prev.industry || prev.industry.toLowerCase() === "other") && res.industry
+            ? res.industry
+            : prev.industry,
+        primary_offering:
+          !prev.primary_offering && res.primary_offering
+            ? res.primary_offering
+            : prev.primary_offering,
+      }));
+      setDetectedNicheMeta({
+        confidence: res.confidence,
+        evidence: res.evidence,
+        alternatives: res.suggested_alternatives || [],
+      });
+    } catch (err) {
+      setNicheDetectError(err instanceof Error ? err.message : "Niche detection failed");
+    } finally {
+      setDetectingNiche(false);
+    }
+  }
 
   async function load() {
     setLoading(true);
@@ -191,6 +232,8 @@ export default function ClientsPage() {
         setIntelSuccess(summary);
         setIntelPhase("success");
         setForm({ name: "", industry: "", niche: "", website: "", primary_offering: "", delivery_emails: "" });
+        setDetectedNicheMeta(null);
+        setNicheDetectError("");
         setOpen(false);
         await load();
       } catch (err) {
@@ -465,16 +508,76 @@ export default function ClientsPage() {
               </datalist>
             </div>
             <div>
-              <div className="flex items-center justify-between">
-                <Label>Sub-Niche / Category (Optional)</Label>
-                <span className="text-[11px] text-[var(--muted)]">e.g. Pizza & Fast Food Delivery</span>
+              <div className="flex items-center justify-between mb-1">
+                <Label className="mb-0">Sub-Niche / Category (Optional)</Label>
+                <button
+                  type="button"
+                  onClick={() => void handleAutoDetectNiche()}
+                  disabled={detectingNiche || !form.name.trim()}
+                  className="inline-flex items-center gap-1 text-xs font-semibold text-[var(--accent)] hover:opacity-85 disabled:cursor-not-allowed disabled:opacity-40 transition"
+                  title={!form.name.trim() ? "Enter brand name first" : "Detect exact commercial niche using AI & web intelligence"}
+                >
+                  {detectingNiche ? (
+                    <>
+                      <Loader2 size={13} className="animate-spin" />
+                      <span>Detecting niche…</span>
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles size={13} />
+                      <span>Auto-detect niche</span>
+                    </>
+                  )}
+                </button>
               </div>
               <Input
                 value={form.niche}
-                onChange={(e) => setForm({ ...form, niche: e.target.value })}
+                onChange={(e) => {
+                  setForm({ ...form, niche: e.target.value });
+                  if (detectedNicheMeta) setDetectedNicheMeta(null);
+                }}
                 placeholder="e.g. Pizza & Fast Food Delivery, B2B SaaS"
               />
-              {clientSuggestedNiches.length > 0 ? (
+              {detectedNicheMeta ? (
+                <div className="mt-2 flex flex-col gap-1 rounded-xl bg-emerald-500/10 p-2.5 text-xs text-emerald-900 border border-emerald-500/20">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="flex items-center gap-1.5 font-semibold text-emerald-800">
+                      <CheckCircle2 size={14} className="text-emerald-600 shrink-0" />
+                      Auto-detected ({detectedNicheMeta.confidence}% confidence)
+                    </span>
+                    <span className="text-[10px] uppercase font-bold tracking-wider text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded">
+                      High Precision
+                    </span>
+                  </div>
+                  {detectedNicheMeta.evidence ? (
+                    <p className="text-[11px] text-emerald-800/80 leading-relaxed">
+                      {detectedNicheMeta.evidence}
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
+              {nicheDetectError ? (
+                <p className="mt-1 text-xs text-red-600">{nicheDetectError}</p>
+              ) : null}
+              {detectedNicheMeta && detectedNicheMeta.alternatives.length > 0 ? (
+                <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                  <span className="text-[11px] text-[var(--muted)]">Suggested alternatives:</span>
+                  {detectedNicheMeta.alternatives.map((alt) => (
+                    <button
+                      key={alt}
+                      type="button"
+                      onClick={() => setForm({ ...form, niche: alt })}
+                      className={`rounded-lg px-2 py-0.5 text-[11px] font-medium transition ${
+                        form.niche.toLowerCase() === alt.toLowerCase()
+                          ? "bg-[var(--accent)] text-white"
+                          : "bg-black/5 text-[var(--ink)] hover:bg-black/10"
+                      }`}
+                    >
+                      {alt}
+                    </button>
+                  ))}
+                </div>
+              ) : clientSuggestedNiches.length > 0 ? (
                 <div className="mt-1.5 flex flex-wrap gap-1.5">
                   {clientSuggestedNiches.slice(0, 5).map((sNiche) => (
                     <button
